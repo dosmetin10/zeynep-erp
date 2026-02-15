@@ -1,0 +1,10 @@
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#0b1220;color:#e2e8f0}
+header{padding:14px 16px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center}
+main{padding:16px;display:grid;gap:12px}
+.card{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,select,button{padding:8px 10px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:#e2e8f0}
+button{background:#22c55e;color:#052e16;font-weight:700;cursor:pointer}
+table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #1e293b;padding:8px;text-align:left}
+.muted{color:#94a3b8}
+.error{color:#fca5a5;white-space:pre-wrap}
