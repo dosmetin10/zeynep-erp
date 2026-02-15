@@ -10,13 +10,13 @@
   <body>
     <section id="loginScreen" class="screen active">
       <div class="card login-card">
-        <h1>MTN Ön Muhasebe & Stok</h1>
-        <p>Operasyonel yönetim paneline giriş yapın.</p>
+        <h1>MTN Ön Muhasebe, Stok ve Takip</h1>
+        <p>Yetkili kullanıcı girişi ile operasyon paneline geçin.</p>
         <form id="loginForm">
           <label>Kullanıcı Adı <input name="username" required /></label>
           <label>Şifre <input type="password" name="password" required /></label>
           <button type="submit">Giriş Yap</button>
-          <small class="muted">Test kullanıcıları: mtn / 1453, muhasebe / 1453</small>
+          <small class="muted">Test: mtn / 1453, muhasebe / 1453</small>
         </form>
       </div>
     </section>
@@ -36,14 +36,27 @@
 
       <main>
         <nav class="tabs" id="tabs">
-          <button data-tab="dashboard" class="active">Özet</button>
-          <button data-tab="cari">Cari</button>
-          <button data-tab="stock">Stok</button>
-          <button data-tab="cash">Kasa</button>
-          <button data-tab="reports">Rapor</button>
+          <button data-tab="dashboard" class="active">Yönetim Özeti</button>
+          <button data-tab="cari">Cari Yönetimi</button>
+          <button data-tab="stock">Stok Yönetimi</button>
+          <button data-tab="cash">Kasa & Finans</button>
+          <button data-tab="sales">Satış İşlemleri</button>
+          <button data-tab="reports">Raporlama</button>
         </nav>
 
-        <section id="dashboard" class="tab-panel active"></section>
+        <section id="dashboard" class="tab-panel active">
+          <div id="dashboardKpis" class="kpi-grid"></div>
+          <div class="grid two">
+            <article class="card">
+              <h3>Kritik Uyarılar</h3>
+              <ul id="criticalAlerts"></ul>
+            </article>
+            <article class="card">
+              <h3>Son Hareketler</h3>
+              <ul id="recentActivities"></ul>
+            </article>
+          </div>
+        </section>
 
         <section id="cari" class="tab-panel">
           <div class="grid two">
@@ -58,12 +71,14 @@
                 </label>
                 <label>Unvan <input name="name" required /></label>
                 <label>Telefon <input name="phone" /></label>
-                <label>Bakiye <input name="balance" type="number" value="0" /></label>
-                <button type="submit">Kaydet</button>
+                <label>VKN / TCKN <input name="taxNo" /></label>
+                <label>Açılış Bakiyesi <input name="balance" type="number" value="0" /></label>
+                <button type="submit">Cari Kaydet</button>
               </form>
             </article>
             <article class="card">
               <h3>Cari Listesi</h3>
+              <input id="customerSearch" placeholder="Unvana göre ara..." />
               <table>
                 <thead><tr><th>Tip</th><th>Unvan</th><th>Telefon</th><th>Bakiye</th></tr></thead>
                 <tbody id="customerRows"></tbody>
@@ -87,15 +102,17 @@
                     <option>Kg</option>
                   </select>
                 </label>
+                <label>Minimum Seviye <input name="minLevel" type="number" value="5" required /></label>
                 <label>Miktar <input name="quantity" type="number" required /></label>
                 <label>Birim Fiyat <input name="price" type="number" step="0.01" required /></label>
-                <button type="submit">Ekle / Güncelle</button>
+                <button type="submit">Stok Ekle / Güncelle</button>
               </form>
             </article>
             <article class="card">
               <h3>Stok Durumu</h3>
+              <input id="stockSearch" placeholder="Kod veya ada göre ara..." />
               <table>
-                <thead><tr><th>Kod</th><th>Ad</th><th>Miktar</th><th>Birim</th><th>Fiyat</th></tr></thead>
+                <thead><tr><th>Kod</th><th>Ad</th><th>Miktar</th><th>Min.</th><th>Birim</th><th>Fiyat</th></tr></thead>
                 <tbody id="stockRows"></tbody>
               </table>
             </article>
@@ -128,13 +145,44 @@
           </div>
         </section>
 
+        <section id="sales" class="tab-panel">
+          <div class="grid two">
+            <article class="card">
+              <h3>Satış Faturası Oluştur</h3>
+              <form id="saleForm">
+                <label>Müşteri
+                  <select name="customerId" id="saleCustomerSelect" required></select>
+                </label>
+                <label>Stok Kalemi
+                  <select name="stockCode" id="saleStockSelect" required></select>
+                </label>
+                <label>Miktar <input name="quantity" type="number" min="1" required /></label>
+                <label>Birim Fiyat <input name="unitPrice" type="number" min="0" step="0.01" required /></label>
+                <label>İskonto (%) <input name="discountRate" type="number" min="0" max="100" value="0" /></label>
+                <button type="submit">Fatura Kes</button>
+              </form>
+            </article>
+            <article class="card">
+              <h3>Satış Fatura Geçmişi</h3>
+              <table>
+                <thead><tr><th>No</th><th>Müşteri</th><th>Tarih</th><th>Tutar</th></tr></thead>
+                <tbody id="saleRows"></tbody>
+              </table>
+            </article>
+          </div>
+        </section>
+
         <section id="reports" class="tab-panel">
           <article class="card">
-            <h3>Operasyon Özeti</h3>
+            <div class="card-head">
+              <h3>Operasyonel Rapor Özeti</h3>
+              <button id="exportCsvBtn" class="secondary">CSV Dışa Aktar</button>
+            </div>
             <div id="reportBox"></div>
           </article>
         </section>
       </main>
+
       <div id="toast"></div>
     </section>
 

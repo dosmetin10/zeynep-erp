@@ -1,17 +1,17 @@
 # MTN Muhasebe ERP
 
-Elektron tabanlı **Ön Muhasebe + Stok Takip** masaüstü uygulaması.
+Elektron tabanlı, gerçek operasyon akışına uygun **Ön Muhasebe + Malzeme Stok + Satış Takip** masaüstü çözümü.
 
-## Kapsam
-Bu sürüm, KOBİ operasyonlarını ayağa kaldırmak için gerekli çekirdek modülleri içerir:
-
-- Cari kart yönetimi (müşteri/tedarikçi)
-- Stok kartı, miktar ve birim fiyat yönetimi
+## Bu sürümde neler var?
+- Kullanıcı giriş sistemi
+- Cari yönetimi (müşteri / tedarikçi)
+- Stok kartı yönetimi (minimum seviye, kritik stok uyarısı)
 - Kasa gelir/gider hareketleri
-- Anlık KPI paneli (cari sayısı, stok değeri, kasa bakiye, kritik stok)
-- Operasyon rapor özeti
-- JSON yedekleme ve yedekten geri yükleme
-- Giriş ekranı ve temel kullanıcı doğrulama
+- Satış faturası oluşturma (stok düşümü + müşteri bakiyesi güncelleme)
+- Yönetim KPI paneli (alacak, stok değeri, kasa, aylık ciro)
+- Aktivite merkezi ve kritik operasyon uyarıları
+- CSV satış raporu dışa aktarma
+- JSON yedekleme / geri yükleme
 
 ## Kurulum
 ```bash
@@ -19,7 +19,7 @@ npm install
 npm start
 ```
 
-## Derleme
+## Paketleme
 ```bash
 npm run dist
 ```
@@ -28,13 +28,13 @@ npm run dist
 - `mtn / 1453`
 - `muhasebe / 1453`
 
-## Proje yapısı
+## Mimari
 ```
 src/
-├── main.js
-├── preload.js
+├── main.js              # Electron main + IPC (backup, csv export)
+├── preload.js           # Güvenli context bridge
 └── renderer/
-    ├── index.html
-    ├── app.js
-    └── styles.css
+    ├── index.html       # Ekran yapısı
+    ├── app.js           # İş kuralları ve state yönetimi
+    └── styles.css       # Kurumsal UI
 ```
