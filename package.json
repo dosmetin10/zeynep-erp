@@ -1,0 +1,37 @@
+{
+  "name": "mtn-muhasebe",
+  "version": "0.2.1",
+  "description": "MTN Muhasebe masaustu uygulamasi temel iskelet",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^30.0.2",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.mtn.muhasebe",
+    "productName": "MTN Muhasebe",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
