@@ -1,0 +1,81 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --card: #111827;
+  --muted: #94a3b8;
+  --accent: #22c55e;
+  --danger: #ef4444;
+  --line: #1f2937;
+}
+
+* { box-sizing: border-box; font-family: Inter, Segoe UI, sans-serif; }
+body { margin: 0; background: linear-gradient(160deg, #020617, #0f172a); color: #e2e8f0; }
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: block; }
+.card {
+  background: rgba(17, 24, 39, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+}
+.login-card { width: min(520px, calc(100% - 32px)); margin: 8vh auto; }
+h1, h2, h3 { margin-top: 0; }
+.muted { color: var(--muted); }
+form { display: grid; gap: 10px; }
+label { display: grid; gap: 6px; font-size: 14px; color: #cbd5e1; }
+input, select, button {
+  border-radius: 10px;
+  border: 1px solid #334155;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+input, select { background: #0b1220; color: #f1f5f9; }
+button {
+  background: var(--accent);
+  color: #052e16;
+  font-weight: 700;
+  cursor: pointer;
+}
+button.secondary { background: #1d4ed8; color: #dbeafe; }
+button.danger { background: var(--danger); color: #fff; }
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: rgba(2, 6, 23, 0.96);
+  backdrop-filter: blur(8px);
+}
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+main { padding: 18px 24px 28px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tabs button { background: #1e293b; color: #cbd5e1; }
+.tabs button.active { background: var(--accent); color: #052e16; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.grid.two { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { border-bottom: 1px solid #1e293b; text-align: left; padding: 8px 6px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kpi { background: #0b1220; border: 1px solid #1e293b; border-radius: 12px; padding: 12px; }
+.kpi strong { display: block; font-size: 24px; margin-top: 8px; color: #4ade80; }
+#toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+}
+#toast.show { opacity: 1; }
+@media (max-width: 1100px) {
+  .grid.two, .kpi-grid { grid-template-columns: 1fr; }
+}
