@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset='utf-8'><title>MTN ERP Ana Menü</title><link rel='stylesheet' href='../common/styles.css'></head>
+<body>
+<header><strong>MTN ERP Ana Menü</strong><span id='who' class='muted'></span></header>
+<main>
+<div class='card'>
+  <h3>Kimlik Doğrulama</h3>
+  <div class='row'>
+    <input id='username' placeholder='kullanıcı'>
+    <input id='password' type='password' placeholder='parola'>
+    <button id='setupBtn'>İlk Admin Kurulumu</button>
+    <button id='loginBtn'>Giriş</button>
+  </div>
+</div>
+<div class='card'>
+  <h3>Modüller (Her buton ayrı pencere açar)</h3>
+  <div class='row' id='buttons'></div>
+</div>
+<div class='card'><h3>Özet</h3><pre id='summary'></pre></div>
+<div id='error' class='error'></div>
+</main>
+<script src='index.js'></script>
+</body></html>

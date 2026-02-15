@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset='utf-8'><title>Satış</title><link rel='stylesheet' href='../common/styles.css'></head>
+<body>
+<header><strong>Satış Modülü</strong><button id='refresh'>Yenile</button></header>
+<main>
+<div class='card'><h3>Faturalar</h3><table><tbody id='rows'></tbody></table></div>
+<div class='card'>
+<h3>Yeni Satış</h3>
+<div class='row'>
+<input id='partyId' placeholder='Müşteri ID'>
+<input id='productId' placeholder='Ürün ID'>
+<input id='quantity' placeholder='Miktar'>
+<input id='unitPrice' placeholder='Birim Fiyat'>
+<select id='collectionMethod'><option value='credit'>Vadeli</option><option value='cash'>Nakit</option><option value='bank'>Banka</option></select>
+<button id='create'>Fatura Kes</button>
+</div></div>
+<div id='error' class='error'></div>
+</main>
+<script src='../common/module.js'></script><script src='index.js'></script>
+</body></html>

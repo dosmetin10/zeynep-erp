@@ -2,10 +2,10 @@
   "name": "mtn-muhasebe",
   "version": "0.2.1",
   "description": "MTN Muhasebe masaustu uygulamasi temel iskelet",
-  "main": "src/main.js",
+  "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --dir",
+    "test": "node --test tests/*.test.js",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -33,5 +33,12 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.6.2"
+  },
+  "engines": {
+    "node": ">=20 <25"
   }
 }
