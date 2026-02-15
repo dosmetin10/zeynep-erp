@@ -83,3 +83,9 @@ src/
 
 ---
 *Mevcut durum: ✅ Tamamlanmış ve dağıtıma hazır*
+
+
+## Electron Açılış Hatası Düzeltmesi
+- `Cannot find module .../main.js` hatası için `src/main.js` ve `src/preload.js` geri eklendi.
+- Electron artık bir çökme yerine güvenli bir launcher ekranı açar.
+- Asıl üretim çalışma modeli web sunucu + tarayıcı istemcisidir (`MTN_OfficePack` bat dosyaları).
