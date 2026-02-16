@@ -34,6 +34,16 @@ CREATE TABLE IF NOT EXISTS journal_lines (
   amount REAL NOT NULL CHECK(amount > 0),
   description TEXT
 );
+
+CREATE TABLE IF NOT EXISTS customers (
+  id INTEGER PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('customer','supplier','both')),
+  phone TEXT,
+  city TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS inventory_items (
   id INTEGER PRIMARY KEY,
   sku TEXT UNIQUE NOT NULL,

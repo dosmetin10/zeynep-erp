@@ -1,8 +1,57 @@
-<!doctype html><html><head><meta charset='utf-8'><title>Modül</title></head><body>
-<h3 id='h'></h3><div id='content'>Yükleniyor...</div>
+<!doctype html><html><head><meta charset='utf-8'><title>Modül</title>
+<style>
+body{font-family:Arial;padding:12px} .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px} input,select,button{padding:8px}
+table{border-collapse:collapse;width:100%;margin-top:8px} th,td{border:1px solid #ddd;padding:6px;font-size:13px} .muted{color:#666}
+</style></head><body>
+<h3 id='h'></h3>
+<div id='actions'></div>
+<div class='row'><input id='q' placeholder='Ara...'><button id='search'>Ara</button><span id='meta' class='muted'></span></div>
+<div id='content'>Yükleniyor...</div>
 <script>
 const name=new URLSearchParams(location.search).get('name');document.getElementById('h').textContent=name;
-const c=document.getElementById('content');
-function load(){if(name==='Raporlar'){fetch('/api/reports/trial-balance').then(r=>r.json()).then(d=>c.innerHTML='<pre>'+JSON.stringify(d,null,2)+'</pre>');} else {c.textContent='Bu modül için liste/arama/sayfalama API hazır. ('+name+')';}}
-const es=new EventSource('/events');es.onmessage=()=>setTimeout(load,500);load();
+const c=document.getElementById('content'); const a=document.getElementById('actions');
+let page=1,pageSize=20;
+
+async function api(url,opt){const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt});const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error?.reason||d.error||JSON.stringify(d)); return d;}
+function td(v){return `<td>${v??''}</td>`}
+
+function setupActions(){
+  if(name==='Cari') a.innerHTML=`<div class='row'><input id='code' placeholder='Cari Kod'><input id='cname' placeholder='Cari Ad'><select id='ctype'><option value='customer'>Müşteri</option><option value='supplier'>Tedarikçi</option><option value='both'>Her İkisi</option></select><input id='phone' placeholder='Telefon'><input id='city' placeholder='Şehir'><button id='addCari'>Yeni Cari</button></div>`;
+  else if(name==='Stok') a.innerHTML=`<div class='row'><input id='sku' placeholder='Stok Kod'><input id='sname' placeholder='Stok Adı'><input id='qty' type='number' step='0.01' placeholder='Miktar'><input id='cost' type='number' step='0.01' placeholder='Ort Maliyet'><button id='addStok'>Yeni Stok</button></div>`;
+  else if(name==='Satış') a.innerHTML=`<div class='row'><input id='cust' placeholder='Cari Kod'><input id='item' type='number' placeholder='Stok ID'><input id='sqty' type='number' step='0.01' placeholder='Miktar'><input id='price' type='number' step='0.01' placeholder='Fiyat'><select id='pm'><option value='cash'>Nakit</option><option value='bank'>Banka</option><option value='credit'>Vadeli</option></select><button id='addSale'>Satış Kaydet</button></div>`;
+  else a.innerHTML='';
+}
+
+async function load(){
+  try{
+    const q=encodeURIComponent(document.getElementById('q').value||'');
+    if(name==='Cari'){
+      const d=await api(`/api/customers?page=${page}&pageSize=${pageSize}&q=${q}`); document.getElementById('meta').textContent=`Toplam: ${d.total}`;
+      c.innerHTML=`<table><tr><th>ID</th><th>Kod</th><th>Ad</th><th>Tip</th><th>Telefon</th><th>Şehir</th></tr>${d.rows.map(r=>`<tr>${td(r.id)}${td(r.code)}${td(r.name)}${td(r.type)}${td(r.phone)}${td(r.city)}</tr>`).join('')}</table>`;
+    } else if(name==='Stok'){
+      const d=await api(`/api/inventory/items?page=${page}&pageSize=${pageSize}&q=${q}`); document.getElementById('meta').textContent=`Toplam: ${d.total}`;
+      c.innerHTML=`<table><tr><th>ID</th><th>Kod</th><th>Ad</th><th>Miktar</th><th>Ort. Maliyet</th></tr>${d.rows.map(r=>`<tr>${td(r.id)}${td(r.sku)}${td(r.name)}${td(r.qty)}${td(r.avg_cost)}</tr>`).join('')}</table>`;
+    } else if(name==='Satış'){
+      const d=await api(`/api/sales?page=${page}&pageSize=${pageSize}`); document.getElementById('meta').textContent=`Toplam: ${d.total}`;
+      c.innerHTML=`<table><tr><th>ID</th><th>Cari</th><th>StokID</th><th>Miktar</th><th>Fiyat</th><th>Toplam</th><th>Durum</th></tr>${d.rows.map(r=>`<tr>${td(r.id)}${td(r.customer_code)}${td(r.item_id)}${td(r.qty)}${td(r.price)}${td(r.total||r.gross_total)}${td(r.status)}</tr>`).join('')}</table>`;
+    } else if(name==='Raporlar'){
+      const d=await api('/api/reports/trial-balance'); c.innerHTML='<pre>'+JSON.stringify(d,null,2)+'</pre>';
+    } else {
+      c.textContent='Bu modül için arayüz hazırlanıyor. ('+name+')';
+    }
+  }catch(e){c.innerHTML=`<p style='color:#b42318'>Hata: ${e.message}</p>`}
+}
+
+document.getElementById('search').onclick=()=>{page=1;load()};
+setupActions();
+
+document.addEventListener('click', async (ev)=>{
+  try{
+    if(ev.target.id==='addCari'){await api('/api/customers',{method:'POST',body:JSON.stringify({code:code.value,name:cname.value,type:ctype.value,phone:phone.value,city:city.value})});code.value='';cname.value='';load();}
+    if(ev.target.id==='addStok'){await api('/api/inventory/items',{method:'POST',body:JSON.stringify({sku:sku.value,name:sname.value,qty:Number(qty.value||0),avgCost:Number(cost.value||0)})});sku.value='';sname.value='';qty.value='';cost.value='';load();}
+    if(ev.target.id==='addSale'){await api('/api/sales',{method:'POST',body:JSON.stringify({customerCode:cust.value,itemId:Number(item.value),qty:Number(sqty.value),price:Number(price.value),paymentMethod:pm.value,lines:[{itemId:Number(item.value),qty:Number(sqty.value),price:Number(price.value),vatRate:0.2}]})});cust.value='';item.value='';sqty.value='';price.value='';load();}
+  }catch(e){alert('İşlem hatası: '+e.message)}
+});
+
+const es=new EventSource('/events');es.onmessage=()=>setTimeout(load,400);load();
 </script></body></html>

@@ -54,6 +54,62 @@ app.post('/api/setup/admin', (req, res) => {
   res.json({ ok: true });
 });
 
+
+app.get('/api/customers', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const q = String(req.query.q || '').trim();
+  const where = q ? 'WHERE code LIKE ? OR name LIKE ? OR city LIKE ?' : '';
+  const params = q ? [`%${q}%`, `%${q}%`, `%${q}%`] : [];
+  const total = db.prepare(`SELECT COUNT(*) c FROM customers ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT * FROM customers ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/customers', (req, res) => {
+  const { code, name, type = 'customer', phone = null, city = null } = req.body;
+  if (!code || !name) return res.status(400).json(err('CAR_001', 'Eksik alan', 'Kod ve ad zorunludur.', 'Cari kodu ve adını girin.'));
+  try {
+    const r = db.prepare('INSERT INTO customers(code,name,type,phone,city) VALUES(?,?,?,?,?)').run(code, name, type, phone, city);
+    appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'customer', entityId: r.lastInsertRowid, action: 'create', afterJson: JSON.stringify(req.body) });
+    publish({ entityType: 'customer', entityId: r.lastInsertRowid, action: 'create' });
+    res.status(201).json({ id: r.lastInsertRowid });
+  } catch (e) {
+    res.status(400).json(err('CAR_002', 'Cari kayıt hatası', e.message, 'Kod tekrarını kontrol edin.'));
+  }
+});
+
+app.put('/api/customers/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const old = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
+  if (!old) return res.status(404).json(err('CAR_404', 'Cari yok', 'Kayıt bulunamadı.', 'Listeyi yenileyin.'));
+  const payload = { ...old, ...req.body };
+  db.prepare('UPDATE customers SET code=?, name=?, type=?, phone=?, city=? WHERE id=?')
+    .run(payload.code, payload.name, payload.type, payload.phone || null, payload.city || null, id);
+  appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'customer', entityId: id, action: 'update', beforeJson: JSON.stringify(old), afterJson: JSON.stringify(payload) });
+  publish({ entityType: 'customer', entityId: id, action: 'update' });
+  res.json({ ok: true });
+});
+
+app.get('/api/inventory/items', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const q = String(req.query.q || '').trim();
+  const where = q ? 'WHERE sku LIKE ? OR name LIKE ?' : '';
+  const params = q ? [`%${q}%`, `%${q}%`] : [];
+  const total = db.prepare(`SELECT COUNT(*) c FROM inventory_items ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT * FROM inventory_items ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.get('/api/sales', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM sales').get().c;
+  const rows = db.prepare('SELECT * FROM sales ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
 app.post('/api/inventory/items', (req, res) => {
   const { sku, name, qty = 0, avgCost = 0 } = req.body;
   const x = db.prepare('INSERT INTO inventory_items(sku,name,qty,avg_cost) VALUES(?,?,?,?)').run(sku, name, qty, avgCost);
