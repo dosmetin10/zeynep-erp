@@ -1,10 +1,34 @@
 <!doctype html><html><head><meta charset='utf-8'><title>MTN Mühendislik</title>
-<style>body{font-family:Arial;margin:0}header{display:flex;gap:10px;align-items:center;padding:10px;background:#0b3d5e;color:#fff}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px}button{padding:12px}</style>
+<style>
+body{font-family:Arial;margin:0;background:#f3f6fa}
+header{display:flex;gap:10px;align-items:center;padding:10px 14px;background:#0b3d5e;color:#fff}
+header img{background:#fff;border-radius:6px;padding:2px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px}
+button{padding:12px;border:1px solid #d0d5dd;background:#fff;border-radius:8px;cursor:pointer}
+button:hover{background:#f9fafb}
+#panels{padding:0 12px 12px}
+.panel{border:1px solid #d0d5dd;border-radius:10px;background:#fff;margin-bottom:10px;overflow:hidden;box-shadow:0 8px 18px rgba(16,24,40,.06)}
+.panel-head{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#eef2f6}
+.panel-head strong{font-size:14px}
+.panel-head .close{font-size:18px;line-height:1;padding:4px 10px;border:0;background:#b42318;color:#fff;border-radius:6px}
+.panel iframe{width:100%;height:560px;border:0}
+.muted{color:#667085;font-size:13px;padding:0 12px 10px}
+</style>
 </head><body>
-<header><img src='/branding/logo.svg' width='36'/><h2>MTN Mühendislik</h2></header>
+<header><img src='/branding/logo.svg' width='36' height='36'/><h2>MTN Mühendislik</h2></header>
+<div class='muted'>Modül butonuna bastığınızda aşağıda yeni panel açılır. Paneli <b>×</b> ile kapatabilirsiniz.</div>
 <div class='grid' id='menu'></div>
+<div id='panels'></div>
 <script>
 const modules=['Cari','Stok','Satış','Alış','Kasa','Banka','Teklif','Fatura','Raporlar','Kullanıcılar & Roller','Ayarlar','Yedekleme','Hakkında'];
-const m=document.getElementById('menu');
-modules.forEach(x=>{const b=document.createElement('button');b.textContent=x;b.onclick=()=>window.open('/module.html?name='+encodeURIComponent(x),'_blank');m.appendChild(b);});
+const m=document.getElementById('menu'); const panels=document.getElementById('panels');
+function openPanel(name){
+  const id='panel-'+name.replace(/[^a-z0-9]/gi,'_');
+  const ex=document.getElementById(id); if(ex){ex.scrollIntoView({behavior:'smooth'});return;}
+  const wrap=document.createElement('div'); wrap.className='panel'; wrap.id=id;
+  wrap.innerHTML=`<div class='panel-head'><strong>${name}</strong><button class='close' title='Kapat'>&times;</button></div><iframe src='/module.html?name=${encodeURIComponent(name)}'></iframe>`;
+  wrap.querySelector('.close').onclick=()=>wrap.remove();
+  panels.prepend(wrap);
+}
+modules.forEach(x=>{const b=document.createElement('button');b.textContent=x;b.onclick=()=>openPanel(x);m.appendChild(b);});
 </script></body></html>

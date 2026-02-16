@@ -26,6 +26,27 @@ function err(ref, title, reason, solution) {
   return { error: { title, reason, solution, referenceCode: ref } };
 }
 
+
+function nextCode(prefix, values) {
+  let max = 0;
+  for (const v of values) {
+    const m = String(v || '').match(/(\d+)$/);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`;
+}
+
+function getNextCustomerCode() {
+  const rows = db.prepare('SELECT code FROM customers').all();
+  return nextCode('CR', rows.map(r => r.code));
+}
+
+function getNextStockCode() {
+  const rows = db.prepare('SELECT sku FROM inventory_items').all();
+  return nextCode('STK', rows.map(r => r.sku));
+}
+
+
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -46,6 +67,14 @@ app.get('/api/health-check', (req, res) => {
   res.json({ ok: unbalanced.length === 0 && negativeStock.length === 0 && fkBroken.length === 0, unbalanced, negativeStock, fkBroken });
 });
 
+
+app.get('/api/codes/next', (req, res) => {
+  const type = String(req.query.type || '');
+  if (type === 'customer') return res.json({ code: getNextCustomerCode() });
+  if (type === 'stock') return res.json({ code: getNextStockCode() });
+  return res.status(400).json(err('CODE_001', 'Kod tipi hatalı', 'type parametresi customer veya stock olmalı.', 'Doğru kod tipini gönderin.'));
+});
+
 app.post('/api/setup/admin', (req, res) => {
   const { username, password } = req.body;
   if (!password || password.length < 8) return res.status(400).json(err('AUTH_001', 'Geçersiz parola', 'Parola en az 8 karakter olmalı.', 'Güçlü parola girin.'));
@@ -54,9 +83,68 @@ app.post('/api/setup/admin', (req, res) => {
   res.json({ ok: true });
 });
 
+
+app.get('/api/customers', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const q = String(req.query.q || '').trim();
+  const where = q ? 'WHERE code LIKE ? OR name LIKE ? OR city LIKE ?' : '';
+  const params = q ? [`%${q}%`, `%${q}%`, `%${q}%`] : [];
+  const total = db.prepare(`SELECT COUNT(*) c FROM customers ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT * FROM customers ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/customers', (req, res) => {
+  const { code, name, type = 'customer', phone = null, city = null } = req.body;
+  const finalCode = (code || '').trim() || getNextCustomerCode();
+  if (!name) return res.status(400).json(err('CAR_001', 'Eksik alan', 'Kod ve ad zorunludur.', 'Cari kodu ve adını girin.'));
+  try {
+    const r = db.prepare('INSERT INTO customers(code,name,type,phone,city) VALUES(?,?,?,?,?)').run(finalCode, name, type, phone, city);
+    appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'customer', entityId: r.lastInsertRowid, action: 'create', afterJson: JSON.stringify(req.body) });
+    publish({ entityType: 'customer', entityId: r.lastInsertRowid, action: 'create' });
+    res.status(201).json({ id: r.lastInsertRowid });
+  } catch (e) {
+    res.status(400).json(err('CAR_002', 'Cari kayıt hatası', e.message, 'Kod tekrarını kontrol edin.'));
+  }
+});
+
+app.put('/api/customers/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const old = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
+  if (!old) return res.status(404).json(err('CAR_404', 'Cari yok', 'Kayıt bulunamadı.', 'Listeyi yenileyin.'));
+  const payload = { ...old, ...req.body };
+  db.prepare('UPDATE customers SET code=?, name=?, type=?, phone=?, city=? WHERE id=?')
+    .run(payload.code, payload.name, payload.type, payload.phone || null, payload.city || null, id);
+  appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'customer', entityId: id, action: 'update', beforeJson: JSON.stringify(old), afterJson: JSON.stringify(payload) });
+  publish({ entityType: 'customer', entityId: id, action: 'update' });
+  res.json({ ok: true });
+});
+
+app.get('/api/inventory/items', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const q = String(req.query.q || '').trim();
+  const where = q ? 'WHERE sku LIKE ? OR name LIKE ?' : '';
+  const params = q ? [`%${q}%`, `%${q}%`] : [];
+  const total = db.prepare(`SELECT COUNT(*) c FROM inventory_items ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT * FROM inventory_items ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.get('/api/sales', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM sales').get().c;
+  const rows = db.prepare('SELECT * FROM sales ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
 app.post('/api/inventory/items', (req, res) => {
   const { sku, name, qty = 0, avgCost = 0 } = req.body;
-  const x = db.prepare('INSERT INTO inventory_items(sku,name,qty,avg_cost) VALUES(?,?,?,?)').run(sku, name, qty, avgCost);
+  const finalSku = (sku || '').trim() || getNextStockCode();
+  if (!name) return res.status(400).json(err('STK_002', 'Eksik alan', 'Stok adı zorunludur.', 'Stok adı girin.'));
+  const x = db.prepare('INSERT INTO inventory_items(sku,name,qty,avg_cost) VALUES(?,?,?,?)').run(finalSku, name, qty, avgCost);
   publish({ entityType: 'inventory', entityId: x.lastInsertRowid, action: 'create' });
   res.status(201).json({ id: x.lastInsertRowid });
 });

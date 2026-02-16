@@ -1,25 +1,46 @@
 <!doctype html><html><head><meta charset='utf-8'><title>Modül</title>
 <style>
-body{font-family:Arial;padding:12px} .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px} input,select,button{padding:8px}
+body{font-family:Arial;padding:10px;background:#fff} 
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:8px}
+.brand{display:flex;align-items:center;gap:8px}
+.brand img{background:#fff;border:1px solid #ddd;border-radius:6px;padding:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px} input,select,button{padding:8px}
+button{border:1px solid #d0d5dd;border-radius:8px;background:#fff;cursor:pointer}button:hover{background:#f9fafb}
+button.primary{background:#0b3d5e;color:#fff;border-color:#0b3d5e}
+button.danger{background:#b42318;color:#fff;border-color:#b42318}
 table{border-collapse:collapse;width:100%;margin-top:8px} th,td{border:1px solid #ddd;padding:6px;font-size:13px} .muted{color:#666}
 </style></head><body>
-<h3 id='h'></h3>
+<div class='top'>
+  <div class='brand'><img src='/branding/logo.svg' width='30' height='30'/><strong id='h'></strong></div>
+  <div class='row'>
+    <button id='backBtn'>← Geri</button>
+    <button id='closeBtn' class='danger'>× Kapat</button>
+  </div>
+</div>
 <div id='actions'></div>
 <div class='row'><input id='q' placeholder='Ara...'><button id='search'>Ara</button><span id='meta' class='muted'></span></div>
 <div id='content'>Yükleniyor...</div>
 <script>
-const name=new URLSearchParams(location.search).get('name');document.getElementById('h').textContent=name;
+const name=new URLSearchParams(location.search).get('name');document.getElementById('h').textContent='MTN '+name;
 const c=document.getElementById('content'); const a=document.getElementById('actions');
 let page=1,pageSize=20;
 
+document.getElementById('backBtn').onclick=()=>history.back();
+document.getElementById('closeBtn').onclick=()=>{ if(window.top!==window.self){ window.frameElement?.closest('.panel')?.remove(); } else { window.close(); }};
+
 async function api(url,opt){const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt});const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error?.reason||d.error||JSON.stringify(d)); return d;}
 function td(v){return `<td>${v??''}</td>`}
+async function fillCodes(){
+  try{ if(name==='Cari' && !code.value){ const d=await api('/api/codes/next?type=customer'); code.value=d.code; } }catch{}
+  try{ if(name==='Stok' && !sku.value){ const d=await api('/api/codes/next?type=stock'); sku.value=d.code; } }catch{}
+}
 
 function setupActions(){
-  if(name==='Cari') a.innerHTML=`<div class='row'><input id='code' placeholder='Cari Kod'><input id='cname' placeholder='Cari Ad'><select id='ctype'><option value='customer'>Müşteri</option><option value='supplier'>Tedarikçi</option><option value='both'>Her İkisi</option></select><input id='phone' placeholder='Telefon'><input id='city' placeholder='Şehir'><button id='addCari'>Yeni Cari</button></div>`;
-  else if(name==='Stok') a.innerHTML=`<div class='row'><input id='sku' placeholder='Stok Kod'><input id='sname' placeholder='Stok Adı'><input id='qty' type='number' step='0.01' placeholder='Miktar'><input id='cost' type='number' step='0.01' placeholder='Ort Maliyet'><button id='addStok'>Yeni Stok</button></div>`;
-  else if(name==='Satış') a.innerHTML=`<div class='row'><input id='cust' placeholder='Cari Kod'><input id='item' type='number' placeholder='Stok ID'><input id='sqty' type='number' step='0.01' placeholder='Miktar'><input id='price' type='number' step='0.01' placeholder='Fiyat'><select id='pm'><option value='cash'>Nakit</option><option value='bank'>Banka</option><option value='credit'>Vadeli</option></select><button id='addSale'>Satış Kaydet</button></div>`;
+  if(name==='Cari') a.innerHTML=`<div class='row'><input id='code' placeholder='Cari Kod (otomatik)'><input id='cname' placeholder='Cari Ad'><select id='ctype'><option value='customer'>Müşteri</option><option value='supplier'>Tedarikçi</option><option value='both'>Her İkisi</option></select><input id='phone' placeholder='Telefon'><input id='city' placeholder='Şehir'><button class='primary' id='addCari'>Yeni Cari</button></div>`;
+  else if(name==='Stok') a.innerHTML=`<div class='row'><input id='sku' placeholder='Stok Kod (otomatik)'><input id='sname' placeholder='Stok Adı'><input id='qty' type='number' step='0.01' placeholder='Miktar'><input id='cost' type='number' step='0.01' placeholder='Ort Maliyet'><button class='primary' id='addStok'>Yeni Stok</button></div>`;
+  else if(name==='Satış') a.innerHTML=`<div class='row'><input id='cust' placeholder='Cari Kod'><input id='item' type='number' placeholder='Stok ID'><input id='sqty' type='number' step='0.01' placeholder='Miktar'><input id='price' type='number' step='0.01' placeholder='Fiyat'><select id='pm'><option value='cash'>Nakit</option><option value='bank'>Banka</option><option value='credit'>Vadeli</option></select><button class='primary' id='addSale'>Satış Kaydet</button></div>`;
   else a.innerHTML='';
+  fillCodes();
 }
 
 async function load(){
@@ -47,8 +68,8 @@ setupActions();
 
 document.addEventListener('click', async (ev)=>{
   try{
-    if(ev.target.id==='addCari'){await api('/api/customers',{method:'POST',body:JSON.stringify({code:code.value,name:cname.value,type:ctype.value,phone:phone.value,city:city.value})});code.value='';cname.value='';load();}
-    if(ev.target.id==='addStok'){await api('/api/inventory/items',{method:'POST',body:JSON.stringify({sku:sku.value,name:sname.value,qty:Number(qty.value||0),avgCost:Number(cost.value||0)})});sku.value='';sname.value='';qty.value='';cost.value='';load();}
+    if(ev.target.id==='addCari'){await api('/api/customers',{method:'POST',body:JSON.stringify({code:code.value,name:cname.value,type:ctype.value,phone:phone.value,city:city.value})});code.value='';cname.value='';await fillCodes();load();}
+    if(ev.target.id==='addStok'){await api('/api/inventory/items',{method:'POST',body:JSON.stringify({sku:sku.value,name:sname.value,qty:Number(qty.value||0),avgCost:Number(cost.value||0)})});sku.value='';sname.value='';qty.value='';cost.value='';await fillCodes();load();}
     if(ev.target.id==='addSale'){await api('/api/sales',{method:'POST',body:JSON.stringify({customerCode:cust.value,itemId:Number(item.value),qty:Number(sqty.value),price:Number(price.value),paymentMethod:pm.value,lines:[{itemId:Number(item.value),qty:Number(sqty.value),price:Number(price.value),vatRate:0.2}]})});cust.value='';item.value='';sqty.value='';price.value='';load();}
   }catch(e){alert('İşlem hatası: '+e.message)}
 });

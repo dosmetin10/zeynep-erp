@@ -33,6 +33,16 @@ function publish(ev) {
   for (const c of clients) c.write(payload);
 }
 
+
+function nextCode(prefix, values) {
+  let max = 0;
+  for (const v of values) {
+    const m = String(v || '').match(/(\d+)$/);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`;
+}
+
 function paged(req) {
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
@@ -52,6 +62,15 @@ app.get('/events', (req, res) => {
   req.on('close', () => clients.delete(res));
 });
 
+
+app.get('/api/codes/next', (_req, res) => {
+  const store = loadStore();
+  const type = String(_req.query.type || '');
+  if (type === 'customer') return res.json({ code: nextCode('CR', store.customers.map(x => x.code)) });
+  if (type === 'stock') return res.json({ code: nextCode('STK', store.items.map(x => x.sku)) });
+  return res.status(400).json({ error: 'Geçersiz kod tipi.' });
+});
+
 app.get('/api/customers', (req, res) => {
   const { page, pageSize, q } = paged(req);
   const store = loadStore();
@@ -62,11 +81,12 @@ app.get('/api/customers', (req, res) => {
 
 app.post('/api/customers', (req, res) => {
   const { code, name, type = 'customer', phone = '', city = '' } = req.body;
-  if (!code || !name) return res.status(400).json({ error: 'Cari kod ve ad zorunlu.' });
+  if (!name) return res.status(400).json({ error: 'Cari kod ve ad zorunlu.' });
   const store = loadStore();
-  if (store.customers.some(x => x.code === code)) return res.status(400).json({ error: 'Cari kodu zaten var.' });
+  const finalCode = (code || '').trim() || nextCode('CR', store.customers.map(x => x.code));
+  if (store.customers.some(x => x.code === finalCode)) return res.status(400).json({ error: 'Cari kodu zaten var.' });
   const id = ++store.seq.customer;
-  store.customers.push({ id, code, name, type, phone, city, created_at: new Date().toISOString() });
+  store.customers.push({ id, code: finalCode, name, type, phone, city, created_at: new Date().toISOString() });
   saveStore(store);
   publish({ entityType: 'customer', entityId: id, action: 'create' });
   res.status(201).json({ id });
@@ -93,11 +113,12 @@ app.get('/api/inventory/items', (req, res) => {
 
 app.post('/api/inventory/items', (req, res) => {
   const { sku, name, qty = 0, avgCost = 0 } = req.body;
-  if (!sku || !name) return res.status(400).json({ error: 'Stok kodu ve adı zorunlu.' });
+  if (!name) return res.status(400).json({ error: 'Stok kodu ve adı zorunlu.' });
   const store = loadStore();
-  if (store.items.some(x => x.sku === sku)) return res.status(400).json({ error: 'Stok kodu zaten var.' });
+  const finalSku = (sku || '').trim() || nextCode('STK', store.items.map(x => x.sku));
+  if (store.items.some(x => x.sku === finalSku)) return res.status(400).json({ error: 'Stok kodu zaten var.' });
   const id = ++store.seq.item;
-  store.items.push({ id, sku, name, qty: Number(qty), avg_cost: Number(avgCost), created_at: new Date().toISOString() });
+  store.items.push({ id, sku: finalSku, name, qty: Number(qty), avg_cost: Number(avgCost), created_at: new Date().toISOString() });
   saveStore(store);
   publish({ entityType: 'inventory', entityId: id, action: 'create' });
   res.status(201).json({ id });

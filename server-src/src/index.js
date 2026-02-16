@@ -26,6 +26,27 @@ function err(ref, title, reason, solution) {
   return { error: { title, reason, solution, referenceCode: ref } };
 }
 
+
+function nextCode(prefix, values) {
+  let max = 0;
+  for (const v of values) {
+    const m = String(v || '').match(/(\d+)$/);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`;
+}
+
+function getNextCustomerCode() {
+  const rows = db.prepare('SELECT code FROM customers').all();
+  return nextCode('CR', rows.map(r => r.code));
+}
+
+function getNextStockCode() {
+  const rows = db.prepare('SELECT sku FROM inventory_items').all();
+  return nextCode('STK', rows.map(r => r.sku));
+}
+
+
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -44,6 +65,14 @@ app.get('/api/health-check', (req, res) => {
   const negativeStock = db.prepare('SELECT id,sku,qty FROM inventory_items WHERE qty < 0').all();
   const fkBroken = db.prepare('PRAGMA foreign_key_check').all();
   res.json({ ok: unbalanced.length === 0 && negativeStock.length === 0 && fkBroken.length === 0, unbalanced, negativeStock, fkBroken });
+});
+
+
+app.get('/api/codes/next', (req, res) => {
+  const type = String(req.query.type || '');
+  if (type === 'customer') return res.json({ code: getNextCustomerCode() });
+  if (type === 'stock') return res.json({ code: getNextStockCode() });
+  return res.status(400).json(err('CODE_001', 'Kod tipi hatalı', 'type parametresi customer veya stock olmalı.', 'Doğru kod tipini gönderin.'));
 });
 
 app.post('/api/setup/admin', (req, res) => {
@@ -68,9 +97,10 @@ app.get('/api/customers', (req, res) => {
 
 app.post('/api/customers', (req, res) => {
   const { code, name, type = 'customer', phone = null, city = null } = req.body;
-  if (!code || !name) return res.status(400).json(err('CAR_001', 'Eksik alan', 'Kod ve ad zorunludur.', 'Cari kodu ve adını girin.'));
+  const finalCode = (code || '').trim() || getNextCustomerCode();
+  if (!name) return res.status(400).json(err('CAR_001', 'Eksik alan', 'Kod ve ad zorunludur.', 'Cari kodu ve adını girin.'));
   try {
-    const r = db.prepare('INSERT INTO customers(code,name,type,phone,city) VALUES(?,?,?,?,?)').run(code, name, type, phone, city);
+    const r = db.prepare('INSERT INTO customers(code,name,type,phone,city) VALUES(?,?,?,?,?)').run(finalCode, name, type, phone, city);
     appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'customer', entityId: r.lastInsertRowid, action: 'create', afterJson: JSON.stringify(req.body) });
     publish({ entityType: 'customer', entityId: r.lastInsertRowid, action: 'create' });
     res.status(201).json({ id: r.lastInsertRowid });
@@ -112,7 +142,9 @@ app.get('/api/sales', (req, res) => {
 
 app.post('/api/inventory/items', (req, res) => {
   const { sku, name, qty = 0, avgCost = 0 } = req.body;
-  const x = db.prepare('INSERT INTO inventory_items(sku,name,qty,avg_cost) VALUES(?,?,?,?)').run(sku, name, qty, avgCost);
+  const finalSku = (sku || '').trim() || getNextStockCode();
+  if (!name) return res.status(400).json(err('STK_002', 'Eksik alan', 'Stok adı zorunludur.', 'Stok adı girin.'));
+  const x = db.prepare('INSERT INTO inventory_items(sku,name,qty,avg_cost) VALUES(?,?,?,?)').run(finalSku, name, qty, avgCost);
   publish({ entityType: 'inventory', entityId: x.lastInsertRowid, action: 'create' });
   res.status(201).json({ id: x.lastInsertRowid });
 });
