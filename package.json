@@ -20,6 +20,7 @@
     },
     "files": [
       "src/**/*",
+      "client-src/web/**/*",
       "package.json"
     ],
     "win": {
@@ -33,5 +34,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "express": "^4.21.2"
   }
 }
