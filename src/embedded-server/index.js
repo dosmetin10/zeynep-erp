@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const PDFDocument = require('pdfkit');
 
 const PORT = Number(process.env.SERVER_PORT || 3777);
 const DATA_FILE = path.resolve(process.cwd(), 'mtn-embedded.json');
@@ -16,8 +17,11 @@ function resolveStaticDir() {
 }
 
 function loadStore() {
-  if (!fs.existsSync(DATA_FILE)) return { customers: [], items: [], sales: [], seq: { customer: 0, item: 0, sale: 0 } };
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  if (!fs.existsSync(DATA_FILE)) return { customers: [], items: [], sales: [], dispatches: [], collections: [], seq: { customer: 0, item: 0, sale: 0, dispatch: 0, collection: 0 } };
+  const x = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  x.dispatches = x.dispatches || []; x.collections = x.collections || [];
+  x.seq = x.seq || {}; x.seq.dispatch = x.seq.dispatch || 0; x.seq.collection = x.seq.collection || 0;
+  return x;
 }
 
 function saveStore(store) {
@@ -145,6 +149,67 @@ app.post('/api/sales', (req, res) => {
   saveStore(store);
   publish({ entityType: 'sale', entityId: id, action: 'posted' });
   res.status(201).json({ id });
+});
+
+
+app.get('/api/dispatch-notes', (req, res) => {
+  const { page, pageSize } = paged(req);
+  const store = loadStore();
+  const rows = store.dispatches.slice((page - 1) * pageSize, page * pageSize).reverse();
+  res.json({ page, pageSize, total: store.dispatches.length, rows });
+});
+
+app.post('/api/dispatch-notes', (req, res) => {
+  const { noteNo, customerCode, itemId, qty, kind = 'İrsaliye' } = req.body;
+  if (!customerCode || !itemId || Number(qty) <= 0) return res.status(400).json({ error: 'Eksik/yanlış irsaliye verisi.' });
+  const store = loadStore();
+  const item = store.items.find(x => x.id === Number(itemId));
+  if (!item) return res.status(400).json({ error: 'Stok bulunamadı.' });
+  if (item.qty < Number(qty)) return res.status(400).json({ error: 'Negatif stok yasak. Yetersiz miktar.' });
+  item.qty -= Number(qty);
+  const id = ++store.seq.dispatch;
+  store.dispatches.push({ id, note_no: (noteNo || '').trim() || `IRS-${Date.now()}`, customer_code: customerCode, item_id: Number(itemId), qty: Number(qty), kind, status: 'posted', created_at: new Date().toISOString() });
+  saveStore(store);
+  publish({ entityType: 'dispatch', entityId: id, action: 'posted' });
+  res.status(201).json({ id });
+});
+
+app.get('/api/collections', (req, res) => {
+  const { page, pageSize } = paged(req);
+  const store = loadStore();
+  const rows = store.collections.slice((page - 1) * pageSize, page * pageSize).reverse();
+  res.json({ page, pageSize, total: store.collections.length, rows });
+});
+
+app.post('/api/collections', (req, res) => {
+  const { customerCode, amount, method = 'cash' } = req.body;
+  if (!customerCode || Number(amount) <= 0) return res.status(400).json({ error: 'Eksik/yanlış tahsilat verisi.' });
+  const store = loadStore();
+  const id = ++store.seq.collection;
+  store.collections.push({ id, customer_code: customerCode, amount: Number(amount), method, created_at: new Date().toISOString() });
+  saveStore(store);
+  publish({ entityType: 'collection', entityId: id, action: 'create' });
+  res.status(201).json({ id });
+});
+
+app.get('/api/collections/:id/pdf', (req, res) => {
+  const store = loadStore();
+  const row = store.collections.find(x => x.id === Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Makbuz bulunamadı.' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename=tahsilat-makbuzu-${row.id}.pdf`);
+  const doc = new PDFDocument({ margin: 40 });
+  doc.pipe(res);
+  doc.fontSize(22).fillColor('#0b3d5e').text('MTN ENERJİ - TAHSİLAT MAKBuzu'.toUpperCase());
+  doc.moveDown();
+  doc.fontSize(12).fillColor('#000').text(`Makbuz No: TM-${row.id}`);
+  doc.text(`Cari Kod: ${row.customer_code}`);
+  doc.text(`Tutar: ${row.amount.toFixed(2)} TL`);
+  doc.text(`Yöntem: ${row.method}`);
+  doc.text(`Tarih: ${row.created_at}`);
+  doc.moveDown();
+  doc.fontSize(10).fillColor('#666').text('Bu makbuz sistem tarafından üretilmiştir.');
+  doc.end();
 });
 
 app.get('/api/reports/trial-balance', (_req, res) => {

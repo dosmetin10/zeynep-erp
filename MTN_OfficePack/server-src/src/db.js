@@ -81,6 +81,24 @@ CREATE TABLE IF NOT EXISTS sale_lines (
   price REAL NOT NULL CHECK(price > 0),
   vat_rate REAL NOT NULL CHECK(vat_rate >= 0)
 );
+
+CREATE TABLE IF NOT EXISTS dispatch_notes (
+  id INTEGER PRIMARY KEY,
+  note_no TEXT UNIQUE NOT NULL,
+  customer_code TEXT NOT NULL,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  qty REAL NOT NULL CHECK(qty > 0),
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'posted',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS collection_receipts (
+  id INTEGER PRIMARY KEY,
+  customer_code TEXT NOT NULL,
+  amount REAL NOT NULL CHECK(amount > 0),
+  method TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS audit_events (
   event_id TEXT PRIMARY KEY,
   actor_user_id INTEGER,

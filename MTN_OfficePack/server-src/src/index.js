@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import PDFDocument from 'pdfkit';
 import { openDb, postVoucher, appendAudit } from './db.js';
 
 const PORT = Number(process.env.SERVER_PORT || 3777);
@@ -223,6 +224,71 @@ app.get('/api/reports/trial-balance', (req, res) => {
     SUM(CASE WHEN dc='C' THEN amount ELSE 0 END) AS cr
     FROM journal_lines GROUP BY account_code ORDER BY account_code`).all();
   res.json(rows);
+});
+
+
+app.get('/api/dispatch-notes', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM dispatch_notes').get().c;
+  const rows = db.prepare('SELECT * FROM dispatch_notes ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/dispatch-notes', (req, res) => {
+  const { noteNo, customerCode, itemId, qty, kind = 'İrsaliye' } = req.body;
+  if (!customerCode || !itemId || Number(qty) <= 0) return res.status(400).json(err('DIS_001', 'Eksik veri', 'İrsaliye alanları eksik.', 'Cari, stok, miktar girin.'));
+  const note = (noteNo || '').trim() || `IRS-${Date.now()}`;
+  const item = db.prepare('SELECT * FROM inventory_items WHERE id=?').get(itemId);
+  if (!item) return res.status(400).json(err('DIS_002', 'Stok yok', 'Stok bulunamadı.', 'Geçerli stok seçin.'));
+  if (item.qty < Number(qty)) return res.status(400).json(err('DIS_003', 'Negatif stok', 'Yeterli stok yok.', 'Miktarı düşürün veya giriş yapın.'));
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE inventory_items SET qty=qty-? WHERE id=?').run(Number(qty), itemId);
+    const r = db.prepare('INSERT INTO dispatch_notes(note_no,customer_code,item_id,qty,kind,status) VALUES(?,?,?,?,?,?)')
+      .run(note, customerCode, itemId, Number(qty), kind, 'posted');
+    publish({ entityType: 'dispatch', entityId: r.lastInsertRowid, action: 'posted' });
+    return r.lastInsertRowid;
+  });
+  res.status(201).json({ id: tx() });
+});
+
+app.get('/api/collections', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM collection_receipts').get().c;
+  const rows = db.prepare('SELECT * FROM collection_receipts ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/collections', (req, res) => {
+  const { customerCode, amount, method = 'cash' } = req.body;
+  if (!customerCode || Number(amount) <= 0) return res.status(400).json(err('COL_001', 'Eksik veri', 'Cari ve tutar zorunlu.', 'Geçerli cari ve tutar girin.'));
+  const r = db.prepare('INSERT INTO collection_receipts(customer_code,amount,method) VALUES(?,?,?)').run(customerCode, Number(amount), method);
+  postVoucher(db, { code: `TAH-${r.lastInsertRowid}`, sourceType: 'collection', sourceId: String(r.lastInsertRowid), lines: [
+    { accountCode: method === 'bank' ? '102' : '100', dc: 'D', amount: Number(amount) },
+    { accountCode: '120', dc: 'C', amount: Number(amount) },
+  ]});
+  publish({ entityType: 'collection', entityId: r.lastInsertRowid, action: 'create' });
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+app.get('/api/collections/:id/pdf', (req, res) => {
+  const row = db.prepare('SELECT * FROM collection_receipts WHERE id=?').get(Number(req.params.id));
+  if (!row) return res.status(404).json(err('COL_404', 'Makbuz yok', 'Kayıt bulunamadı.', 'Listeyi yenileyin.'));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename=tahsilat-makbuzu-${row.id}.pdf`);
+  const doc = new PDFDocument({ margin: 40 });
+  doc.pipe(res);
+  doc.fontSize(22).fillColor('#0b3d5e').text('MTN ENERJİ - TAHSİLAT MAKBuzu'.toUpperCase());
+  doc.moveDown();
+  doc.fontSize(12).fillColor('#000').text(`Makbuz No: TM-${row.id}`);
+  doc.text(`Cari Kod: ${row.customer_code}`);
+  doc.text(`Tutar: ${row.amount.toFixed(2)} TL`);
+  doc.text(`Yöntem: ${row.method}`);
+  doc.text(`Tarih: ${row.created_at}`);
+  doc.moveDown();
+  doc.fontSize(10).fillColor('#666').text('Bu makbuz sistem tarafından üretilmiştir.');
+  doc.end();
 });
 
 app.post('/api/backup', (req, res) => {
