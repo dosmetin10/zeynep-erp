@@ -5,3 +5,12 @@ npm-debug.log*
 .ipynb_checkpoints/
 *.ipynb
 .artifacts/
+
+# Generated package / binaries
+MTN_OfficePack.zip
+*.png
+*.ico
+*.exe
+*.db
+*.db-shm
+*.db-wal

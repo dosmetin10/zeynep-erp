@@ -1,0 +1,140 @@
+<!doctype html><html><head><meta charset='utf-8'><title>Modül</title>
+<style>
+body{font-family:Tahoma,Arial;margin:0;background:#0f88ad;color:#000}
+.win{margin:14px;border:1px solid #6d9fbe;background:#d8eef8;box-shadow:0 8px 18px rgba(0,0,0,.2)}
+.head{background:linear-gradient(#4ba8de,#2b79b2);color:#fff;padding:6px 8px;font-size:22px;display:flex;justify-content:space-between;align-items:center}
+.head button{background:#d91b1b;color:#fff;border:0;padding:2px 10px;font-size:18px;cursor:pointer}
+.inner{padding:8px}
+.flex{display:flex;gap:8px}.left{width:46%}.right{width:54%}
+.box{border:1px solid #9ab5c9;background:#f4f4f4}
+.box h4{margin:0;background:#e7edf2;padding:4px 6px;border-bottom:1px solid #b8c7d4;font-size:18px}
+.row{display:flex;gap:8px;align-items:center;margin:4px 0} input,select,button{font-size:18px;padding:5px}
+button{border:1px solid #8ea6b7;background:#efefef;cursor:pointer} button.primary{background:#0b88d5;color:#fff;border-color:#0b5f97}
+button.warn{background:#e4dada}
+table{width:100%;border-collapse:collapse;background:#fff}th,td{border:1px solid #b9c7d3;padding:4px;font-size:17px}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.status{margin-top:6px;border:1px solid #9ab5c9;background:#fff;padding:6px;font-weight:bold}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center}
+.modal{width:980px;background:#b9eced;border:2px solid #2ebac2;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.modal .head{font-size:20px}.totals{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.pdf-links a{display:inline-block;margin-right:8px;padding:6px 10px;background:#fff;border:1px solid #8ea6b7;text-decoration:none;color:#000}
+</style></head><body>
+<div class='win'>
+  <div class='head'><span id='title'>MODÜL</span><button id='close'>×</button></div>
+  <div class='inner' id='screen'></div>
+</div>
+
+<div class='modal-bg' id='salesModal'>
+  <div class='modal'>
+    <div class='head'><span>SATIŞ İŞLEMİ</span><button onclick="salesModal.style.display='none'">×</button></div>
+    <div class='inner'>
+      <div class='row'>
+        <label>Cari Kod</label><input id='mCust' style='width:160px'>
+        <label>Stok ID</label><input id='mItem' type='number' style='width:120px'>
+        <label>Miktar</label><input id='mQty' type='number' step='0.01' style='width:110px'>
+        <label>Fiyat</label><input id='mPrice' type='number' step='0.01' style='width:110px'>
+        <label>Ödeme</label><select id='mPay'><option value='cash'>Nakit</option><option value='bank'>Banka</option><option value='credit'>Vadeli</option></select>
+        <button class='primary' id='addLine'>Ekle</button>
+      </div>
+      <table id='mTable'><tr><th>Stok</th><th>Miktar</th><th>Fiyat</th><th>KDV%</th><th>Tutar</th></tr></table>
+      <div class='totals'>
+        <div class='status'>Ara Toplam: <span id='mSub'>0.00</span> TL</div>
+        <div class='status'>KDV: <span id='mVat'>0.00</span> TL | Genel Toplam: <span id='mTotal'>0.00</span> TL</div>
+      </div>
+      <div class='row'>
+        <button class='primary' id='saveSale'>İŞLEMİ KAYDET</button>
+        <div class='pdf-links'><a id='salePdf' target='_blank' href='#'>FATURA YAZDIR</a><a id='dispatchPdf' target='_blank' href='#'>İRSALİYE YAZDIR</a><a id='collectionPdf' target='_blank' href='#'>MAKBUZ YAZDIR</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const name = new URLSearchParams(location.search).get('name') || 'Cari';
+title.textContent = name.toUpperCase();
+close.onclick = () => { if(window.top!==window.self){ window.frameElement?.closest('.panel')?.remove(); } else { window.close(); } };
+const api = async (url,opt)=>{ const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error?.reason||d.error||JSON.stringify(d)); return d; };
+const esc=s=>String(s??'');
+
+let lastCustomer=''; let salesLines=[]; let lastSaleId=0; let lastDispatchId=0; let lastCollectionId=0;
+function calcTotals(){
+  const sub=salesLines.reduce((a,b)=>a+b.qty*b.price,0); const vat=sub*0.2; const total=sub+vat;
+  mSub.textContent=sub.toFixed(2); mVat.textContent=vat.toFixed(2); mTotal.textContent=total.toFixed(2);
+}
+function renderLines(){
+  mTable.innerHTML=`<tr><th>Stok</th><th>Miktar</th><th>Fiyat</th><th>KDV%</th><th>Tutar</th></tr>`+salesLines.map(l=>`<tr><td>${l.itemId}</td><td>${l.qty}</td><td>${l.price}</td><td>20</td><td>${(l.qty*l.price).toFixed(2)}</td></tr>`).join('');
+  calcTotals();
+}
+addLine.onclick=()=>{ const itemId=Number(mItem.value), qty=Number(mQty.value), price=Number(mPrice.value); if(!itemId||qty<=0||price<=0) return alert('Stok, miktar, fiyat girin'); salesLines.push({itemId,qty,price,vatRate:0.2}); mItem.value='';mQty.value='';mPrice.value=''; renderLines(); };
+
+function cariScreen(){
+  screen.innerHTML=`
+  <div class='flex'>
+    <div class='left'>
+      <div class='box'><h4>Cari Hesap Arama</h4><div class='inner'>
+        <div class='row'><label>Aranan Alan</label><select id='qf'><option>Ünvan</option><option>Kod</option></select><input id='q' style='flex:1'><button id='findBtn'>Ara</button></div>
+        <table id='cariTable'><tr><th>Cari Kodu</th><th>Grubu</th><th>Ünvanı</th></tr></table>
+      </div></div>
+    </div>
+    <div class='right'>
+      <div class='box'><h4>Cari Hesap Bilgileri</h4><div class='inner'>
+        <div class='toolbar'><button id='newCari'>Cari Ekle</button><button class='primary' id='saveCari'>Kaydet</button><button id='editCari'>Düzenle</button><button id='delCari'>Sil</button><button id='cancelCari' class='warn'>Vazgeç</button></div>
+        <div class='row'><label style='width:120px'>Cari Kodu:</label><input id='code' style='width:140px'><label>Grubu</label><select id='grp'><option>GENEL</option><option>ÖZEL</option></select></div>
+        <div class='row'><label style='width:120px'>Ünvanı:</label><input id='uname' style='flex:1'></div>
+        <div class='row'><label style='width:120px'>Telefon [1]:</label><input id='tel1' style='width:220px'><label>Telefon [2]:</label><input id='tel2' style='width:220px'></div>
+        <div class='row'><label style='width:120px'>E-Posta:</label><input id='mail' style='width:220px'><label>Şehir:</label><input id='city' style='width:220px'></div>
+        <div class='toolbar'><button id='btnAlis'>ALIŞ</button><button class='primary' id='btnSatis'>SATIŞ</button><button id='btnOdeme'>ÖDEME</button><button id='btnTah'>TAHSİLAT</button></div>
+      </div></div>
+    </div>
+  </div>
+  <div class='box' style='margin-top:8px'><h4>Cari Hesap Hareketleri</h4><div class='inner'><table id='movTable'><tr><th>Tarih</th><th>İşlem Tipi</th><th>Ödeme Şekli</th><th>Belge No</th><th>Tutar</th></tr></table></div></div>
+  <div class='status'>HESAP BAKİYESİ: <span id='balance'>0.00</span> TL</div>`;
+
+  const loadCari = async ()=>{
+    const d = await api(`/api/customers?page=1&pageSize=100&q=${encodeURIComponent(q.value||'')}`);
+    cariTable.innerHTML = `<tr><th>Cari Kodu</th><th>Grubu</th><th>Ünvanı</th></tr>` + d.rows.map(r=>`<tr data-code='${esc(r.code)}'><td>${esc(r.code)}</td><td>${esc(r.type||'GENEL')}</td><td>${esc(r.name)}</td></tr>`).join('');
+    if(!code.value){ const n=await api('/api/codes/next?type=customer'); code.value=n.code; }
+  };
+  const loadMov = async ()=>{
+    if(!code.value) return;
+    const d = await api(`/api/customers/${encodeURIComponent(code.value)}/movements`);
+    movTable.innerHTML = `<tr><th>Tarih</th><th>İşlem Tipi</th><th>Ödeme Şekli</th><th>Belge No</th><th>Tutar</th></tr>` + d.rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.method)}</td><td>${esc(r.ref_id)}</td><td>${Number(r.amount||0).toFixed(2)}</td></tr>`).join('');
+    const bal=d.rows.reduce((a,b)=>a + (b.type==='TAHSILAT'?-Number(b.amount):Number(b.amount)),0); balance.textContent=bal.toFixed(2);
+  };
+
+  findBtn.onclick=loadCari;
+  newCari.onclick=async()=>{code.value=(await api('/api/codes/next?type=customer')).code; uname.value=''; tel1.value=''; tel2.value=''; mail.value=''; city.value='';};
+  saveCari.onclick=async()=>{await api('/api/customers',{method:'POST',body:JSON.stringify({code:code.value,name:uname.value,type:'customer',phone:tel1.value,city:city.value})}); lastCustomer=code.value; await loadCari(); await loadMov();};
+  cariTable.onclick=(e)=>{const tr=e.target.closest('tr[data-code]'); if(!tr) return; const tds=tr.querySelectorAll('td'); code.value=tds[0].textContent; uname.value=tds[2].textContent; lastCustomer=code.value; loadMov(); };
+  btnSatis.onclick=()=>{ if(!code.value) return alert('Önce cari seçin'); mCust.value=code.value; salesLines=[]; renderLines(); salesModal.style.display='flex'; };
+  btnTah.onclick=async()=>{ if(!code.value) return alert('Önce cari seçin'); const amount=prompt('Tahsilat tutarı (TL)'); if(!amount) return; const r=await api('/api/collections',{method:'POST',body:JSON.stringify({customerCode:code.value,amount:Number(amount),method:'cash'})}); lastCollectionId=r.id; await loadMov(); collectionPdf.href='/api/collections/'+r.id+'/pdf'; alert('Tahsilat kaydedildi.'); };
+
+  loadCari();
+}
+
+saveSale.onclick = async ()=>{
+  if(!mCust.value) return alert('Cari kod girin');
+  if(!salesLines.length) return alert('En az bir satır ekleyin');
+  const sale=await api('/api/sales',{method:'POST',body:JSON.stringify({customerCode:mCust.value,paymentMethod:mPay.value,lines:salesLines})});
+  lastSaleId=sale.id;
+  const dis=await api('/api/dispatch-notes',{method:'POST',body:JSON.stringify({customerCode:mCust.value,itemId:salesLines[0].itemId,qty:salesLines[0].qty,kind:'Satış İrsaliyesi'})});
+  lastDispatchId=dis.id;
+  salePdf.href='/api/sales/'+lastSaleId+'/pdf';
+  dispatchPdf.href='/api/dispatch-notes/'+lastDispatchId+'/pdf';
+  if(lastCollectionId) collectionPdf.href='/api/collections/'+lastCollectionId+'/pdf';
+  alert('Satış ve irsaliye kaydedildi. Yazdır bağlantılarını kullanabilirsiniz.');
+};
+
+function simpleList(mod, endpoint, cols, pdfBase=null){
+  screen.innerHTML=`<div class='box'><h4>${mod}</h4><div class='inner'><table id='t'></table></div></div>`;
+  api(endpoint).then(d=>{const rows=d.rows||d; const pdfHead=pdfBase?'<th>PDF</th>':''; t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+pdfHead+'</tr>' + rows.map(r=>`<tr>${cols.map(c=>`<td>${esc(r[c])}</td>`).join('')}${pdfBase?`<td><a target="_blank" href="${pdfBase}/${r.id}/pdf">PDF</a></td>`:''}</tr>`).join('')});
+}
+
+if(name==='Cari') cariScreen();
+else if(name==='Stok') simpleList('Stok Kartları','/api/inventory/items?page=1&pageSize=100',['id','sku','name','qty','avg_cost']);
+else if(name==='Satış') simpleList('Satış Listesi','/api/sales?page=1&pageSize=100',['id','customer_code','qty','price','status'],'/api/sales');
+else if(name==='İrsaliye' || name==='Satış İrsaliyesi') simpleList('İrsaliye Listesi','/api/dispatch-notes?page=1&pageSize=100',['id','note_no','customer_code','qty','kind','status'],'/api/dispatch-notes');
+else if(name==='Tahsilat Makbuzu') simpleList('Tahsilat Makbuzları','/api/collections?page=1&pageSize=100',['id','customer_code','amount','method','created_at'],'/api/collections');
+else if(name==='Raporlar') simpleList('Mizan','/api/reports/trial-balance',['account_code','dr','cr']);
+else screen.innerHTML = `<div class='status'>${name} modülü hazır ve bu ekrana entegre ediliyor.</div>`;
+</script></body></html>
