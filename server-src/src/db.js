@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS sales (
   gross_total REAL NOT NULL CHECK(gross_total > 0),
   voucher_id INTEGER REFERENCES journal_vouchers(id),
   reversal_voucher_id INTEGER REFERENCES journal_vouchers(id),
+  cogs_reversal_voucher_id INTEGER REFERENCES journal_vouchers(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS sale_lines (
@@ -110,6 +111,11 @@ CREATE TABLE IF NOT EXISTS audit_events (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `);
+
+  const saleColumns = db.prepare('PRAGMA table_info(sales)').all().map((x) => x.name);
+  if (!saleColumns.includes('cogs_reversal_voucher_id')) {
+    db.exec('ALTER TABLE sales ADD COLUMN cogs_reversal_voucher_id INTEGER REFERENCES journal_vouchers(id)');
+  }
 }
 
 export function validateVoucher(lines) {

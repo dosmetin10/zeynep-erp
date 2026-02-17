@@ -29,3 +29,14 @@ test('17 audit append-only table exists', ()=> {
 test('18 fk on', ()=> { const x=db.pragma('foreign_keys', { simple: true }); assert.equal(x,1);});
 test('19 journal mode available', ()=> { const x=db.pragma('journal_mode', { simple: true }); assert.ok(['wal','memory'].includes(String(x).toLowerCase()));});
 test('20 voucher count', ()=> { const c=db.prepare('select count(*) c from journal_vouchers').get().c; assert.ok(c>=7);});
+
+
+test('21 sales table has cogs reversal column', ()=> {
+ const cols=db.prepare('PRAGMA table_info(sales)').all().map(r=>r.name);
+ assert.ok(cols.includes('cogs_reversal_voucher_id'));
+});
+
+test('22 cogs reversal voucher mapping', ()=> {
+ const id=postVoucher(db,{code:'RC1',sourceType:'sale_cost_reversal',sourceId:'42',lines:[{accountCode:'153',dc:'D',amount:40},{accountCode:'620',dc:'C',amount:40}]});
+ assert.ok(id>0);
+});

@@ -152,12 +152,14 @@ app.post('/api/inventory/items', (req, res) => {
 
 app.post('/api/sales', (req, res) => {
   const { paymentMethod, customerCode, lines } = req.body;
+  if (!customerCode) return res.status(400).json(err('SALE_002', 'Eksik cari', 'Cari kodu zorunludur.', 'Geçerli cari seçin.'));
+  if (!['credit', 'cash', 'bank'].includes(paymentMethod)) return res.status(400).json(err('SALE_003', 'Ödeme tipi hatalı', 'Ödeme tipi credit/cash/bank olmalıdır.', 'Geçerli ödeme tipi seçin.'));
   if (!Array.isArray(lines) || !lines.length) return res.status(400).json(err('SALE_001', 'Satır eksik', 'Satış satırı yok.', 'En az bir satır ekleyin.'));
   let net = 0; let vat = 0; let cogs = 0;
   const saleLines = [];
   const tx = db.transaction(() => {
     for (const l of lines) {
-      if (l.qty <= 0 || l.price <= 0) throw new Error('VALIDATION');
+      if (l.qty <= 0 || l.price <= 0 || l.vatRate < 0) throw new Error('VALIDATION');
       const item = db.prepare('SELECT * FROM inventory_items WHERE id=?').get(l.itemId);
       if (!item) throw new Error('ITEM_MISSING');
       if (item.qty < l.qty) throw new Error('NEGATIVE_STOCK');
@@ -204,18 +206,59 @@ app.post('/api/sales', (req, res) => {
 });
 
 app.post('/api/sales/:id/void', (req, res) => {
-  const id = req.params.id;
+  const id = Number(req.params.id);
   const sale = db.prepare('SELECT * FROM sales WHERE id=?').get(id);
   if (!sale || sale.status !== 'posted') return res.status(400).json(err('SALE_404', 'Kayıt yok', 'Sadece posted kayıt void olabilir.', 'Doğru kayıt seçin.'));
-  const revId = postVoucher(db, { code: `REV-SAT-${id}`, sourceType: 'sale_reversal', sourceId: id, lines: [
-    { accountCode: sale.payment_method === 'cash' ? '100' : sale.payment_method === 'bank' ? '102' : '120', dc: 'C', amount: sale.gross_total },
-    { accountCode: '600', dc: 'D', amount: sale.net_total },
-    { accountCode: '391', dc: 'D', amount: sale.vat_total },
-  ] });
-  db.prepare('UPDATE sales SET status=?, reversal_voucher_id=? WHERE id=?').run('void', revId, id);
-  appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'sale', entityId: id, action: 'void' });
-  publish({ entityType: 'sale', entityId: id, action: 'void' });
-  res.json({ ok: true, reversalVoucherId: revId });
+
+  const tx = db.transaction(() => {
+    const saleLines = db.prepare('SELECT * FROM sale_lines WHERE sale_id=?').all(id);
+    for (const line of saleLines) {
+      const item = db.prepare('SELECT * FROM inventory_items WHERE id=?').get(line.item_id);
+      if (!item) throw new Error('ITEM_MISSING');
+      db.prepare('UPDATE inventory_items SET qty = qty + ? WHERE id=?').run(line.qty, line.item_id);
+      db.prepare('INSERT INTO inventory_movements(item_id,movement_type,qty,unit_cost,source_type,source_id) VALUES(?,?,?,?,?,?)')
+        .run(line.item_id, 'return', line.qty, item.avg_cost, 'sale_void', String(id));
+    }
+
+    const accountCode = sale.payment_method === 'cash' ? '100' : sale.payment_method === 'bank' ? '102' : '120';
+    const revId = postVoucher(db, { code: `REV-SAT-${id}`, sourceType: 'sale_reversal', sourceId: String(id), lines: [
+      { accountCode, dc: 'C', amount: sale.gross_total },
+      { accountCode: '600', dc: 'D', amount: sale.net_total },
+      { accountCode: '391', dc: 'D', amount: sale.vat_total },
+    ] });
+
+    const cogs = db.prepare(`
+      SELECT SUM(im.qty * im.unit_cost) AS total
+      FROM inventory_movements im
+      WHERE im.source_type='sale' AND im.source_id = ?
+    `).get(String(id)).total || 0;
+
+    let cogsRevId = null;
+    if (cogs > 0) {
+      cogsRevId = postVoucher(db, {
+        code: `REV-COGS-${id}`,
+        sourceType: 'sale_cost_reversal',
+        sourceId: String(id),
+        lines: [
+          { accountCode: '153', dc: 'D', amount: cogs },
+          { accountCode: '620', dc: 'C', amount: cogs },
+        ],
+      });
+    }
+
+    db.prepare('UPDATE sales SET status=?, reversal_voucher_id=?, cogs_reversal_voucher_id=? WHERE id=?').run('void', revId, cogsRevId, id);
+    appendAudit(db, { eventId: crypto.randomUUID(), entityType: 'sale', entityId: id, action: 'void', afterJson: JSON.stringify({ reversalVoucherId: revId, cogsReversalVoucherId: cogsRevId }) });
+    publish({ entityType: 'sale', entityId: id, action: 'void' });
+    return { revId, cogsRevId };
+  });
+
+  try {
+    const result = tx();
+    res.json({ ok: true, reversalVoucherId: result.revId, cogsReversalVoucherId: result.cogsRevId });
+  } catch (e) {
+    if (e.message === 'ITEM_MISSING') return res.status(400).json(err('SALE_VOID_001', 'Stok kaydı eksik', 'Satış satırı için stok kartı bulunamadı.', 'Stok kartlarını kontrol edin.'));
+    return res.status(400).json(err('SALE_VOID_002', 'Void hatası', e.message, 'Kaydı kontrol edip tekrar deneyin.'));
+  }
 });
 
 app.get('/api/reports/trial-balance', (req, res) => {
