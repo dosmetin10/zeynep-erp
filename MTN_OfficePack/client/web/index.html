@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset='utf-8'><title>Cari Hesap Takip Demo</title>
+<style>
+body{font-family:Tahoma,Arial;margin:0;background:linear-gradient(90deg,#037da2,#98d8ef)}
+.menu{background:#f7f7f7;border-bottom:1px solid #9aa8b0;padding:4px 8px;font-size:30px}
+.menu a{margin-right:16px;color:#111;text-decoration:none;font-size:28px}
+.top{background:linear-gradient(#8fd8ef,#1b83bc);color:#fff;border-top:1px solid #64bbdd;border-bottom:1px solid #0f6395;padding:6px 8px;display:flex;justify-content:space-between;align-items:center}
+.brand{display:flex;gap:10px;align-items:center;font-weight:bold;font-size:28px}
+.brand img{background:#fff;border-radius:6px;padding:2px}
+.toolbar{display:flex;gap:2px;background:rgba(255,255,255,.2);padding:2px;border-bottom:1px solid #0f6395;overflow:auto}
+.tb{min-width:140px;background:#f3f3f3;border:1px solid #7e9db9;padding:10px 8px;text-align:center;font-size:20px;cursor:pointer}
+.tb:hover{background:#fff}
+.workspace{padding:12px}
+.panel{background:#d9eef8;border:1px solid #7ea7c7;box-shadow:0 8px 20px rgba(0,0,0,.2);margin-bottom:10px}
+.panel-head{background:linear-gradient(#4ba8de,#2b79b2);color:#fff;padding:6px 8px;font-size:20px;display:flex;justify-content:space-between;align-items:center}
+.panel-head button{background:#d61f1f;color:#fff;border:0;padding:2px 10px;font-size:20px;cursor:pointer}
+.panel iframe{width:100%;height:820px;border:0;background:#fff}
+.footer{position:fixed;left:0;right:0;bottom:0;background:#2e95cb;color:#fff;padding:6px 10px;font-size:18px;display:flex;justify-content:space-between}
+</style>
+</head><body>
+<div class='menu'>
+  <a href='#' data-open='Cari Hesaplar'>Cari İşlemleri</a><a href='#' data-open='Kasa Girişi'>Kasa İşlemleri</a><a href='#' data-open='Stok Kartları'>Stok İşlemleri</a><a href='#' data-open='Raporlar'>Raporlar</a><a href='#' data-open='Ayarlar'>Ayarlar</a><a href='#' data-open='Program Bilgisi'>Program Bilgisi</a>
+</div>
+<div class='top'>
+  <div class='brand'><img src='/branding/logo.svg' width='44' height='44'/>MTN ENERJİ</div>
+  <div id='clock'></div>
+</div>
+<div class='toolbar' id='toolbar'></div>
+<div class='workspace' id='workspace'></div>
+<div class='footer'><span>HOŞGELDİNİZ</span><span id='today'></span></div>
+<script>
+const modules=['Cari Hesaplar','Kasa Girişi','Kasa Çıkışı','Stok Kartları','İrsaliye','Satış İşlemi','Tahsilat Makbuzu','Raporlar'];
+const mapName={
+  'Cari Hesaplar':'Cari','Kasa Girişi':'Kasa','Kasa Çıkışı':'Kasa','Stok Kartları':'Stok','İrsaliye':'İrsaliye','Satış İşlemi':'Satış','Tahsilat Makbuzu':'Tahsilat Makbuzu','Raporlar':'Raporlar'
+};
+const bar=document.getElementById('toolbar');const ws=document.getElementById('workspace');
+function tick(){const d=new Date();clock.textContent='🕒 '+d.toLocaleTimeString('tr-TR');today.textContent='Bugün: '+d.toLocaleDateString('tr-TR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}setInterval(tick,1000);tick();
+function openPanel(label){
+  const name=mapName[label]||label; const id='p-'+name.replace(/[^a-z0-9]/gi,'_');
+  const ex=document.getElementById(id); if(ex){ex.scrollIntoView({behavior:'smooth'}); return;}
+  const p=document.createElement('div'); p.className='panel'; p.id=id;
+  p.innerHTML=`<div class='panel-head'><strong>${label}</strong><button title='Kapat'>×</button></div><iframe src='/module.html?name=${encodeURIComponent(name)}'></iframe>`;
+  p.querySelector('button').onclick=()=>p.remove(); ws.prepend(p);
+}
+modules.forEach(x=>{const b=document.createElement('div');b.className='tb';b.textContent=x;b.onclick=()=>openPanel(x);bar.appendChild(b);});
+
+[...document.querySelectorAll('.menu a[data-open]')].forEach(a=>{a.onclick=(e)=>{e.preventDefault();openPanel(a.dataset.open);};});
+openPanel('Cari Hesaplar');
+</script></body></html>
