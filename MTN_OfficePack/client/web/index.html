@@ -18,7 +18,7 @@ body{font-family:Tahoma,Arial;margin:0;background:linear-gradient(90deg,#037da2,
 </style>
 </head><body>
 <div class='menu'>
-  <a href='#'>Cari İşlemleri</a><a href='#'>Kasa İşlemleri</a><a href='#'>Stok İşlemleri</a><a href='#'>Raporlar</a><a href='#'>Ayarlar</a><a href='#'>Program Bilgisi</a>
+  <a href='#' data-open='Cari Hesaplar'>Cari İşlemleri</a><a href='#' data-open='Kasa Girişi'>Kasa İşlemleri</a><a href='#' data-open='Stok Kartları'>Stok İşlemleri</a><a href='#' data-open='Raporlar'>Raporlar</a><a href='#' data-open='Ayarlar'>Ayarlar</a><a href='#' data-open='Program Bilgisi'>Program Bilgisi</a>
 </div>
 <div class='top'>
   <div class='brand'><img src='/branding/logo.svg' width='44' height='44'/>MTN ENERJİ</div>
@@ -42,5 +42,7 @@ function openPanel(label){
   p.querySelector('button').onclick=()=>p.remove(); ws.prepend(p);
 }
 modules.forEach(x=>{const b=document.createElement('div');b.className='tb';b.textContent=x;b.onclick=()=>openPanel(x);bar.appendChild(b);});
+
+[...document.querySelectorAll('.menu a[data-open]')].forEach(a=>{a.onclick=(e)=>{e.preventDefault();openPanel(a.dataset.open);};});
 openPanel('Cari Hesaplar');
 </script></body></html>
