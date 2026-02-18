@@ -134,3 +134,25 @@ test('15) every voucher remains balanced', () => {
     assert.ok(Math.abs(d - c) < 0.0001);
   });
 });
+
+
+test('16) void credit sales restores stock and customer balance', () => {
+  const { c, p } = seedCustomerAndProduct();
+  const inv = erp.createSalesInvoice({ partyId: c.id, collectionMethod: 'credit', lines: [{ productId: p.id, quantity: 3, unitPrice: 100 }] });
+  erp.voidInvoice(inv.id, null, 'test');
+
+  const db = openDb();
+  assert.equal(db.prepare('SELECT current_qty q FROM products WHERE id=?').get(p.id).q, 100);
+  assert.equal(db.prepare('SELECT balance b FROM parties WHERE id=?').get(c.id).b, 0);
+  const reversalMove = db.prepare("SELECT COUNT(*) c FROM inventory_movements WHERE source_type='void_sales_invoice' AND source_id=?").get(inv.id).c;
+  assert.ok(reversalMove > 0);
+});
+
+test('17) void cash sales does not reduce customer balance below zero', () => {
+  const { c, p } = seedCustomerAndProduct();
+  const inv = erp.createSalesInvoice({ partyId: c.id, collectionMethod: 'cash', lines: [{ productId: p.id, quantity: 2, unitPrice: 100 }] });
+  erp.voidInvoice(inv.id, null, 'test');
+
+  const db = openDb();
+  assert.equal(db.prepare('SELECT balance b FROM parties WHERE id=?').get(c.id).b, 0);
+});

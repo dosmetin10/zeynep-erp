@@ -169,6 +169,32 @@ function voidInvoice(invoiceId, createdBy, reason) {
   return db.transaction(() => {
     const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(invoiceId);
     assert(invoice && invoice.status === 'posted', 'ERP-015', 'İptal başarısız', 'Fatura bulunamadı veya iptal edilmiş', 'Geçerli fatura seçin');
+
+    if (invoice.type === 'sales') {
+      const lines = db.prepare('SELECT product_id, quantity, unit_cost_snapshot FROM invoice_lines WHERE invoice_id=?').all(invoiceId);
+      const moveInsert = db.prepare('INSERT INTO inventory_movements(product_id,warehouse_id,movement_type,quantity,unit_cost,source_type,source_id) VALUES (?,?,?,?,?,?,?)');
+      lines.forEach((line) => {
+        db.prepare('UPDATE products SET current_qty=current_qty+? WHERE id=?').run(Number(line.quantity), line.product_id);
+        moveInsert.run(line.product_id, 1, 'in', Number(line.quantity), Number(line.unit_cost_snapshot || 0), 'void_sales_invoice', invoiceId);
+      });
+
+      const hasReceivableImpact = db.prepare(`
+        SELECT COUNT(*) c
+        FROM journal_vouchers v
+        JOIN journal_lines l ON l.voucher_id = v.id
+        WHERE v.ref_type='invoice'
+          AND v.ref_id=?
+          AND v.voucher_type='sales'
+          AND v.status='posted'
+          AND l.account_code='120'
+          AND l.debit > 0
+      `).get(invoiceId).c > 0;
+
+      if (hasReceivableImpact) {
+        db.prepare('UPDATE parties SET balance=balance-? WHERE id=?').run(Number(invoice.net_total), invoice.party_id);
+      }
+    }
+
     db.prepare('UPDATE invoices SET status=?, void_reason=? WHERE id=?').run('void', reason || 'İptal', invoiceId);
     const vouchers = db.prepare('SELECT id FROM journal_vouchers WHERE ref_type=? AND ref_id=? AND status=?').all('invoice', invoiceId, 'posted');
     vouchers.forEach((v) => voidVoucher(v.id, createdBy, `Fatura iptal ${invoice.invoice_no}`));

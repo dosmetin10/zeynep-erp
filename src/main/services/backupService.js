@@ -69,8 +69,27 @@ async function backupRestore() {
   const db = openDb();
   db.transaction(() => {
     ['journal_lines','journal_vouchers','invoice_lines','invoices','payments','inventory_movements','products','parties','audit_events','users','roles','user_roles','accounts','settings','warehouses'].forEach((t) => db.prepare(`DELETE FROM ${t}`).run());
-    Object.keys(data).forEach((table) => {
-      if (!Array.isArray(data[table]) || table === 'schema_version') return;
+
+    const restoreOrder = [
+      'roles',
+      'users',
+      'user_roles',
+      'settings',
+      'parties',
+      'warehouses',
+      'products',
+      'inventory_movements',
+      'invoices',
+      'invoice_lines',
+      'payments',
+      'accounts',
+      'journal_vouchers',
+      'journal_lines',
+      'audit_events',
+    ];
+
+    restoreOrder.forEach((table) => {
+      if (!Array.isArray(data[table])) return;
       data[table].forEach((row) => {
         const keys = Object.keys(row);
         const sql = `INSERT INTO ${table}(${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`;
