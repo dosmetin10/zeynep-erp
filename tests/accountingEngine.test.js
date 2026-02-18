@@ -6,6 +6,7 @@ const path = require('path');
 const { closeDb, getDbPath, openDb } = require('../src/main/db/db');
 const { postVoucher, voidVoucher } = require('../src/main/services/accountingService');
 const erp = require('../src/main/services/erpService');
+const { restoreData } = require('../src/main/services/backupService');
 
 function resetDb() {
   closeDb();
@@ -155,4 +156,65 @@ test('17) void cash sales does not reduce customer balance below zero', () => {
 
   const db = openDb();
   assert.equal(db.prepare('SELECT balance b FROM parties WHERE id=?').get(c.id).b, 0);
+});
+
+test('18) restoreData inserts users before FK-linked journal_vouchers and audit_events', () => {
+  const db = openDb();
+
+  const backupData = {
+    journal_vouchers: [
+      {
+        id: 1,
+        voucher_no: 'JV-000001',
+        voucher_type: 'manual',
+        ref_type: null,
+        ref_id: null,
+        status: 'posted',
+        description: 'test',
+        created_by: 1,
+        created_at: '2024-01-01T00:00:00.000Z',
+        void_of_voucher_id: null,
+      },
+    ],
+    journal_lines: [
+      { id: 1, voucher_id: 1, account_code: '100', debit: 100, credit: 0, line_no: 1, description: 'd' },
+      { id: 2, voucher_id: 1, account_code: '600', debit: 0, credit: 100, line_no: 2, description: 'c' },
+    ],
+    audit_events: [
+      {
+        event_id: 'evt-1',
+        actor_user_id: 1,
+        action: 'create',
+        entity_type: 'invoice',
+        entity_id: '1',
+        before_json: null,
+        after_json: '{}',
+        created_at: '2024-01-01T00:00:00.000Z',
+      },
+    ],
+    users: [
+      { id: 1, username: 'admin', password_hash: 'hash', is_active: 1, created_at: '2024-01-01T00:00:00.000Z' },
+    ],
+    roles: [{ id: 1, code: 'admin', name: 'Yönetici' }],
+    user_roles: [{ user_id: 1, role_id: 1 }],
+    settings: [],
+    parties: [],
+    warehouses: [],
+    products: [],
+    inventory_movements: [],
+    invoices: [],
+    invoice_lines: [],
+    payments: [],
+    accounts: [{ code: '100', name: 'Kasa', type: 'asset' }, { code: '600', name: 'Yurtiçi Satışlar', type: 'income' }],
+  };
+
+  assert.doesNotThrow(() => {
+    db.transaction(() => {
+      restoreData(db, backupData);
+    })();
+  });
+
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM users').get().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM journal_vouchers').get().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM audit_events').get().c, 1);
 });
