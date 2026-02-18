@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "test": "node --test tests/server.test.js"
   },
   "devDependencies": {
     "electron": "^30.0.2",
@@ -20,6 +21,7 @@
     },
     "files": [
       "src/**/*",
+      "client-src/web/**/*",
       "package.json"
     ],
     "win": {
@@ -33,5 +35,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^4.21.2",
+    "pdfkit": "^0.15.0"
   }
 }

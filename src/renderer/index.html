@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MTN Muhasebe Desktop Launcher</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f3f6fa; color: #1d2939; }
+    .wrap { max-width: 900px; margin: 32px auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 10px 26px rgba(16,24,40,.08); }
+    h1 { margin-top: 0; color: #0b3d5e; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { border: 1px solid #d0d5dd; border-radius: 10px; padding: 16px; background: #fcfdff; }
+    .btn { display: inline-block; padding: 10px 14px; border-radius: 8px; background: #0b3d5e; color: #fff; text-decoration: none; border: 0; cursor: pointer; }
+    .btn.secondary { background: #475467; }
+    .muted { color: #667085; font-size: 14px; }
+    .status { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+    .status.ok { background: #ecfdf3; color: #067647; }
+    .status.err { background: #fef3f2; color: #b42318; }
+    code { background: #eef2f6; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>MTN Mühendislik — Desktop Başlatıcı</h1>
+    <p class="muted">Masaüstü uygulaması açılışta sunucuyu otomatik kontrol eder. Sunucu çalışmıyorsa bu güvenli ekran gösterilir.</p>
+    <div id="status" class="status err">Sunucu kontrol ediliyor...</div>
+
+    <div class="grid" style="margin-top: 16px;">
+      <div class="card">
+        <h3>Win11 Sunucu</h3>
+        <p><code>MTN_OfficePack/server-win11/start-server.bat</code> çalıştırın.</p>
+      </div>
+      <div class="card">
+        <h3>İstemci Erişimi</h3>
+        <p><code>http://127.0.0.1:3777</code> veya LAN IP üzerinden açın.</p>
+      </div>
+    </div>
+
+    <p style="margin-top: 18px; display:flex; gap:8px; flex-wrap:wrap;">
+      <a class="btn" href="http://127.0.0.1:3777" target="_blank" rel="noreferrer">ERP Arayüzünü Aç</a>
+      <button class="btn secondary" id="retry">Durumu Yenile</button>
+    </p>
+  </div>
+
+  <script>
+    async function ping() {
+      const el = document.getElementById('status');
+      try {
+        const r = await fetch('http://127.0.0.1:3777/api/health-check', { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        el.className = 'status ok';
+        el.textContent = 'Sunucu aktif. ERP açılabilir durumda.';
+      } catch {
+        el.className = 'status err';
+        el.textContent = 'Sunucu erişilemiyor. Önce start-server.bat çalıştırın.';
+      }
+    }
+    document.getElementById('retry').addEventListener('click', ping);
+    ping();
+  </script>
+</body>
+</html>
