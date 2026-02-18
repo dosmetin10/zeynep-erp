@@ -51,6 +51,55 @@ function healthCheck(data) {
   Object.values(pQty).forEach((q) => assert(q >= 0, 'BKP-002', 'Restore reddedildi', 'Negatif stok tespit edildi', 'Veri bütünlüğünü düzeltin'));
 }
 
+const RESTORE_DELETE_ORDER = [
+  'journal_lines',
+  'journal_vouchers',
+  'invoice_lines',
+  'invoices',
+  'payments',
+  'inventory_movements',
+  'products',
+  'parties',
+  'audit_events',
+  'users',
+  'roles',
+  'user_roles',
+  'accounts',
+  'settings',
+  'warehouses',
+];
+
+const RESTORE_INSERT_ORDER = [
+  'roles',
+  'users',
+  'user_roles',
+  'settings',
+  'parties',
+  'warehouses',
+  'products',
+  'inventory_movements',
+  'invoices',
+  'invoice_lines',
+  'payments',
+  'accounts',
+  'journal_vouchers',
+  'journal_lines',
+  'audit_events',
+];
+
+function restoreData(db, data) {
+  RESTORE_DELETE_ORDER.forEach((t) => db.prepare(`DELETE FROM ${t}`).run());
+
+  RESTORE_INSERT_ORDER.forEach((table) => {
+    if (!Array.isArray(data[table])) return;
+    data[table].forEach((row) => {
+      const keys = Object.keys(row);
+      const sql = `INSERT INTO ${table}(${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`;
+      db.prepare(sql).run(...keys.map((k) => row[k]));
+    });
+  });
+}
+
 async function backupCreate() {
   const { canceled, filePath } = await dialog.showSaveDialog({ filters: [{ name: 'MTN Backup', extensions: ['mtnbak'] }] });
   if (canceled || !filePath) return { ok: false, message: 'İptal edildi' };
@@ -68,36 +117,9 @@ async function backupRestore() {
   healthCheck(data);
   const db = openDb();
   db.transaction(() => {
-    ['journal_lines','journal_vouchers','invoice_lines','invoices','payments','inventory_movements','products','parties','audit_events','users','roles','user_roles','accounts','settings','warehouses'].forEach((t) => db.prepare(`DELETE FROM ${t}`).run());
-
-    const restoreOrder = [
-      'roles',
-      'users',
-      'user_roles',
-      'settings',
-      'parties',
-      'warehouses',
-      'products',
-      'inventory_movements',
-      'invoices',
-      'invoice_lines',
-      'payments',
-      'accounts',
-      'journal_vouchers',
-      'journal_lines',
-      'audit_events',
-    ];
-
-    restoreOrder.forEach((table) => {
-      if (!Array.isArray(data[table])) return;
-      data[table].forEach((row) => {
-        const keys = Object.keys(row);
-        const sql = `INSERT INTO ${table}(${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`;
-        db.prepare(sql).run(...keys.map((k) => row[k]));
-      });
-    });
+    restoreData(db, data);
   })();
   return { ok: true, message: 'Yedek geri yüklendi' };
 }
 
-module.exports = { backupCreate, backupRestore, healthCheck };
+module.exports = { backupCreate, backupRestore, healthCheck, restoreData, RESTORE_INSERT_ORDER, RESTORE_DELETE_ORDER };
