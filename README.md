@@ -1,85 +1,81 @@
-# MTN Muhasebe
-MTN ENERJİ MÜHENDİSLİK Masaüstü Muhasebe Uygulaması
 
-## Özellikler
-- ✅ **Cari Yönetimi**: Müşteri/Tedarikçi kartları ve bakiye takibi
-- ✅ **Stok & Depo**: Malzeme kartları, seviye takibi ve hareket kayıtları
-- ✅ **Teklif & Fatura**: Satış teklifleri ve fatura oluşturma
-- ✅ **Kasa & Banka**: Gelir/gider işlemleri ve nakit akış takibi
-- ✅ **Raporlar**: PDF raporlar (Cari, Stok, Satış, Kasa özeti)
-- ✅ **Yedekleme**: Yerel ve bulut senkronizasyonu
-- ✅ **Çoklu Kullanıcı**: Giriş ekranı ve kullanıcı yönetimi
-- ✅ **Çevrimdışı Mod**: Tüm veriler yerel olarak saklanır
+# MTN Muhasebe ERP (Kurumsal Çoklu Pencere)
 
-## Kullanım
+Bu sürüm, gerçek operasyon kullanımına odaklı olarak yeniden kurgulandı:
+- **Multi-window Electron**: Her modül ayrı pencere.
+- **SQLite WAL + migration**: JSON omurga kaldırıldı.
+- **Double-entry muhasebe motoru**: Journal voucher + line zorunlu, dengesiz kayıt reddi.
+- **RBAC + hash parola**: Varsayılan şifre yok, ilk açılışta admin kurulumu.
+- **Append-only audit log** ve şifreli backup/restore.
+
+## Modül Pencereleri
+Ana menüden açılan pencereler:
+- Cari, Stok, Satış, Alış, Kasa, Banka, Teklif, Fatura, Raporlar, Ayarlar, Kullanıcılar, Yedekleme
+
+## Çalıştırma
+=======
+# MTN Muhasebe ERP
+
+Elektron tabanlı, gerçek operasyon akışına uygun **Ön Muhasebe + Malzeme Stok + Satış Takip** masaüstü çözümü.
+
+## Bu sürümde neler var?
+- Kullanıcı giriş sistemi
+- Cari yönetimi (müşteri / tedarikçi)
+- Stok kartı yönetimi (minimum seviye, kritik stok uyarısı)
+- Kasa gelir/gider hareketleri
+- Satış faturası oluşturma (stok düşümü + müşteri bakiyesi güncelleme)
+- Yönetim KPI paneli (alacak, stok değeri, kasa, aylık ciro)
+- Aktivite merkezi ve kritik operasyon uyarıları
+- CSV satış raporu dışa aktarma
+- JSON yedekleme / geri yükleme
+
+## Kurulum
+
 ```bash
 npm install
 npm start
 ```
 
-## Güncel Kurulum ve Çalıştırma (Hiç bilmeyenler için)
-1) **Node.js kurun** (LTS sürümü önerilir).
-2) **Projeyi indirin** ve bir klasöre çıkarın.
-3) **Komut satırını açın** ve proje klasörüne girin:
-```bash
-cd MTN-OF-S-MUHASEBE
-```
-4) **Bağımlılıkları kurun:**
-```bash
-npm install
-```
-5) **Uygulamayı başlatın:**
-```bash
-npm start
-```
-Bu adımlardan sonra uygulama masaüstünde çalışır halde açılır.
+## Node sürümü (Önemli)
+- Önerilen: **Node 20/22 LTS**
+- Destek aralığı: `>=20 <25`
 
-## İnşa Etme
+> Windows'ta `better-sqlite3` derleme hatası alırsanız (özellikle Node 24 + Visual Studio yoksa):
+> 1) Node 22 LTS'e geçin (`nvm use 22`)
+> 2) `node_modules` ve `package-lock.json` silip tekrar `npm install` çalıştırın
+> 3) Gerekirse Visual Studio Build Tools + "Desktop development with C++" kurun.
+
+## Test
+=======
+
+## Paketleme
+
 ```bash
-npm run dist   # Windows NSIS installer oluştur
-npm run pack   # Portabl sürüm oluştur
+npm test
 ```
 
-## Otomatik Kurulum (Windows)
-Uygulamayı otomatik kurulumla yüklemek için şu adımları izleyin:
+(15+ muhasebe motoru senaryosu)
 
-1) **Installer (Setup) üretin**
-```bash
-npm run dist
-```
-Bu komut, `dist/` klasörü altında **tek tıkla kurulum** yapan bir Windows installer (NSIS) üretir.
+## Dizin Yapısı
+- `src/main`: Electron main, window manager, db, ipc, services
+- `src/renderer`: modül pencereleri
+- `src/shared`: constants + validation
+- `migrations`: SQL migration dosyaları
+- `tests`: muhasebe motoru testleri
+=======
 
-2) **Kurulum dosyasını çalıştırın**
-- `dist/` klasöründeki `MTN Muhasebe Setup.exe` benzeri dosyayı **çift tıklayın**.
-- Kurulum **otomatik** ilerler ve masaüstü + başlat menüsü kısayolları oluşturur.
+## Varsayılan giriş
+- `mtn / 1453`
+- `muhasebe / 1453`
 
-3) **Uygulamayı açın**
-- Masaüstündeki veya Başlat Menüsü’ndeki kısayoldan uygulamayı çalıştırın.
-
-## Giriş Bilgileri (Test)
-- Kullanıcı: `mtn` veya `muhasebe`
-- Şifre: `1453`
-
-## Teknoloji
-- **Electron**: Masaüstü uygulaması
-- **Node.js**: Backend işlemleri
-- **HTML5/CSS3**: UI
-- **PDF Raporlama**: Yazdırma ve PDF export
-
-## Struktur
+## Mimari
 ```
 src/
-├── main.js           # Electron main process
-├── preload.js        # IPC context bridge
+├── main.js              # Electron main + IPC (backup, csv export)
+├── preload.js           # Güvenli context bridge
 └── renderer/
-    ├── index.html    # UI
-    ├── app.js        # UI logic
-    ├── styles.css    # Styling
-    └── assets/       # Resimler
+    ├── index.html       # Ekran yapısı
+    ├── app.js           # İş kuralları ve state yönetimi
+    └── styles.css       # Kurumsal UI
 ```
 
-## Versiyon
-0.1.0 - İlk stabil sürüm
-
----
-*Mevcut durum: ✅ Tamamlanmış ve dağıtıma hazır*
