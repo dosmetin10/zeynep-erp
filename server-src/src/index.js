@@ -48,6 +48,17 @@ function getNextStockCode() {
 }
 
 
+function getNextPurchaseInvoiceNo() {
+  const rows = db.prepare('SELECT invoice_no FROM purchase_invoices').all();
+  return nextCode('ALS', rows.map(r => r.invoice_no));
+}
+
+function getNextTransferCode() {
+  const rows = db.prepare('SELECT transfer_no FROM stock_transfers').all();
+  return nextCode('TRF', rows.map(r => r.transfer_no));
+}
+
+
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -289,6 +300,184 @@ app.get('/api/collections/:id/pdf', (req, res) => {
   doc.moveDown();
   doc.fontSize(10).fillColor('#666').text('Bu makbuz sistem tarafından üretilmiştir.');
   doc.end();
+});
+
+
+
+app.get('/api/purchases', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM purchase_invoices').get().c;
+  const rows = db.prepare('SELECT * FROM purchase_invoices ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/purchases', (req, res) => {
+  const { supplierCode, invoiceNo, lines } = req.body;
+  if (!supplierCode || !Array.isArray(lines) || !lines.length) return res.status(400).json(err('PUR_001', 'Eksik veri', 'Tedarikçi ve satırlar zorunlu.', 'Geçerli kayıt girin.'));
+  const finalInvoiceNo = (invoiceNo || '').trim() || getNextPurchaseInvoiceNo();
+  let net = 0; let vat = 0;
+  const tx = db.transaction(() => {
+    const purchase = db.prepare('INSERT INTO purchase_invoices(invoice_no,supplier_code,net_total,vat_total,gross_total,status) VALUES(?,?,?,?,?,?)')
+      .run(finalInvoiceNo, supplierCode, 0, 0, 0, 'posted');
+    const ins = db.prepare('INSERT INTO purchase_lines(purchase_id,item_id,qty,price,vat_rate) VALUES(?,?,?,?,?)');
+    for (const l of lines) {
+      if (Number(l.qty) <= 0 || Number(l.price) <= 0) throw new Error('PUR_LINE');
+      const item = db.prepare('SELECT * FROM inventory_items WHERE id=?').get(Number(l.itemId));
+      if (!item) throw new Error('PUR_ITEM');
+      const ln = Number(l.qty) * Number(l.price);
+      const lv = ln * Number(l.vatRate || 0);
+      net += ln; vat += lv;
+      ins.run(purchase.lastInsertRowid, Number(l.itemId), Number(l.qty), Number(l.price), Number(l.vatRate || 0));
+      const prevQty = Number(item.qty || 0);
+      const prevVal = prevQty * Number(item.avg_cost || 0);
+      const newQty = prevQty + Number(l.qty);
+      const newAvg = newQty > 0 ? (prevVal + ln) / newQty : Number(item.avg_cost || 0);
+      db.prepare('UPDATE inventory_items SET qty=?, avg_cost=? WHERE id=?').run(newQty, newAvg, Number(l.itemId));
+      db.prepare('INSERT INTO inventory_movements(item_id,movement_type,qty,unit_cost,source_type,source_id) VALUES(?,?,?,?,?,?)')
+        .run(Number(l.itemId), 'in', Number(l.qty), Number(l.price), 'purchase', String(purchase.lastInsertRowid));
+    }
+    const gross = net + vat;
+    db.prepare('UPDATE purchase_invoices SET net_total=?, vat_total=?, gross_total=? WHERE id=?').run(net, vat, gross, purchase.lastInsertRowid);
+    postVoucher(db, { code: `ALS-${purchase.lastInsertRowid}`, sourceType: 'purchase', sourceId: String(purchase.lastInsertRowid), lines: [
+      { accountCode: '153', dc: 'D', amount: net },
+      { accountCode: '191', dc: 'D', amount: vat },
+      { accountCode: '320', dc: 'C', amount: gross },
+    ]});
+    publish({ entityType: 'purchase', entityId: purchase.lastInsertRowid, action: 'posted' });
+    return purchase.lastInsertRowid;
+  });
+  try {
+    res.status(201).json({ id: tx() });
+  } catch (e) {
+    res.status(400).json(err('PUR_002', 'Alış kaydı hatası', e.message, 'Kalemleri kontrol edin.'));
+  }
+});
+
+app.get('/api/payments', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM supplier_payments').get().c;
+  const rows = db.prepare('SELECT * FROM supplier_payments ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/payments', (req, res) => {
+  const { supplierCode, amount, method = 'bank' } = req.body;
+  if (!supplierCode || Number(amount) <= 0) return res.status(400).json(err('PAY_001', 'Eksik veri', 'Tedarikçi ve tutar zorunlu.', 'Geçerli kayıt girin.'));
+  const r = db.prepare('INSERT INTO supplier_payments(supplier_code,amount,method) VALUES(?,?,?)').run(supplierCode, Number(amount), method);
+  postVoucher(db, { code: `ODE-${r.lastInsertRowid}`, sourceType: 'supplier_payment', sourceId: String(r.lastInsertRowid), lines: [
+    { accountCode: '320', dc: 'D', amount: Number(amount) },
+    { accountCode: method === 'cash' ? '100' : '102', dc: 'C', amount: Number(amount) },
+  ]});
+  publish({ entityType: 'payment', entityId: r.lastInsertRowid, action: 'create' });
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+app.get('/api/expenses', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM expense_receipts').get().c;
+  const rows = db.prepare('SELECT * FROM expense_receipts ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/expenses', (req, res) => {
+  const { expenseType, description = '', amount, method = 'bank' } = req.body;
+  if (!expenseType || Number(amount) <= 0) return res.status(400).json(err('EXP_001', 'Eksik veri', 'Masraf türü ve tutar zorunlu.', 'Geçerli masraf girin.'));
+  const r = db.prepare('INSERT INTO expense_receipts(expense_type,description,amount,method) VALUES(?,?,?,?)')
+    .run(expenseType, description, Number(amount), method);
+  postVoucher(db, { code: `MSR-${r.lastInsertRowid}`, sourceType: 'expense', sourceId: String(r.lastInsertRowid), lines: [
+    { accountCode: '770', dc: 'D', amount: Number(amount) },
+    { accountCode: method === 'cash' ? '100' : '102', dc: 'C', amount: Number(amount) },
+  ]});
+  publish({ entityType: 'expense', entityId: r.lastInsertRowid, action: 'create' });
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+app.get('/api/bank-transactions', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM bank_transactions').get().c;
+  const rows = db.prepare('SELECT * FROM bank_transactions ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/bank-transactions', (req, res) => {
+  const { bankName, iban = null, txType = 'deposit', amount, description = '' } = req.body;
+  if (!bankName || Number(amount) <= 0) return res.status(400).json(err('BNK_001', 'Eksik veri', 'Banka adı ve tutar zorunlu.', 'Geçerli işlem girin.'));
+  const r = db.prepare('INSERT INTO bank_transactions(bank_name,iban,tx_type,amount,description) VALUES(?,?,?,?,?)')
+    .run(bankName, iban, txType, Number(amount), description);
+  postVoucher(db, { code: `BNK-${r.lastInsertRowid}`, sourceType: 'bank_tx', sourceId: String(r.lastInsertRowid), lines: txType === 'deposit' ? [
+    { accountCode: '102', dc: 'D', amount: Number(amount) },
+    { accountCode: '100', dc: 'C', amount: Number(amount) },
+  ] : [
+    { accountCode: '100', dc: 'D', amount: Number(amount) },
+    { accountCode: '102', dc: 'C', amount: Number(amount) },
+  ]});
+  publish({ entityType: 'bank', entityId: r.lastInsertRowid, action: 'create' });
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+app.get('/api/warehouses', (req, res) => {
+  const rows = db.prepare('SELECT * FROM warehouses ORDER BY id DESC').all();
+  res.json({ rows });
+});
+
+app.post('/api/warehouses', (req, res) => {
+  const { code, name } = req.body;
+  if (!code || !name) return res.status(400).json(err('WH_001', 'Eksik veri', 'Depo kodu ve adı zorunlu.', 'Depo bilgilerini girin.'));
+  const r = db.prepare('INSERT INTO warehouses(code,name) VALUES(?,?)').run(String(code).trim(), String(name).trim());
+  publish({ entityType: 'warehouse', entityId: r.lastInsertRowid, action: 'create' });
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+app.get('/api/stock-transfers', (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const total = db.prepare('SELECT COUNT(*) c FROM stock_transfers').get().c;
+  const rows = db.prepare('SELECT * FROM stock_transfers ORDER BY id DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize);
+  res.json({ page, pageSize, total, rows });
+});
+
+app.post('/api/stock-transfers', (req, res) => {
+  const { transferNo, itemId, qty, fromWarehouseId, toWarehouseId } = req.body;
+  if (Number(itemId) <= 0 || Number(qty) <= 0 || Number(fromWarehouseId) <= 0 || Number(toWarehouseId) <= 0) {
+    return res.status(400).json(err('TRF_001', 'Eksik veri', 'Transfer alanları zorunludur.', 'Geçerli transfer bilgisi girin.'));
+  }
+  if (Number(fromWarehouseId) === Number(toWarehouseId)) return res.status(400).json(err('TRF_002', 'Hatalı transfer', 'Kaynak ve hedef depo aynı olamaz.', 'Farklı depo seçin.'));
+  const item = db.prepare('SELECT * FROM inventory_items WHERE id=?').get(Number(itemId));
+  if (!item) return res.status(400).json(err('TRF_003', 'Stok bulunamadı', 'Seçili stok yok.', 'Geçerli stok seçin.'));
+  if (Number(item.qty) < Number(qty)) return res.status(400).json(err('TRF_004', 'Yetersiz stok', 'Transfer için stok yetersiz.', 'Miktarı azaltın.'));
+  const finalTransferNo = (transferNo || '').trim() || getNextTransferCode();
+  const tx = db.transaction(() => {
+    const r = db.prepare('INSERT INTO stock_transfers(transfer_no,item_id,qty,from_warehouse_id,to_warehouse_id) VALUES(?,?,?,?,?)')
+      .run(finalTransferNo, Number(itemId), Number(qty), Number(fromWarehouseId), Number(toWarehouseId));
+    db.prepare('INSERT INTO inventory_movements(item_id,movement_type,qty,unit_cost,source_type,source_id) VALUES(?,?,?,?,?,?)')
+      .run(Number(itemId), 'transfer', Number(qty), Number(item.avg_cost || 0), 'stock_transfer', finalTransferNo);
+    return r.lastInsertRowid;
+  });
+  const id = tx();
+  publish({ entityType: 'transfer', entityId: id, action: 'create' });
+  res.status(201).json({ id });
+});
+
+app.get('/api/reports/summary', (req, res) => {
+  const sales = db.prepare('SELECT COALESCE(SUM(gross_total),0) total FROM sales WHERE status="posted"').get().total;
+  const purchases = db.prepare('SELECT COALESCE(SUM(gross_total),0) total FROM purchase_invoices WHERE status="posted"').get().total;
+  const collections = db.prepare('SELECT COALESCE(SUM(amount),0) total FROM collection_receipts').get().total;
+  const payments = db.prepare('SELECT COALESCE(SUM(amount),0) total FROM supplier_payments').get().total;
+  const expenses = db.prepare('SELECT COALESCE(SUM(amount),0) total FROM expense_receipts').get().total;
+  const stockValue = db.prepare('SELECT COALESCE(SUM(qty * avg_cost),0) total FROM inventory_items').get().total;
+  res.json({ sales, purchases, collections, payments, expenses, stockValue, cashFlow: collections - payments - expenses });
+});
+
+app.get('/api/suppliers/:code/movements', (req, res) => {
+  const code = String(req.params.code);
+  const purchases = db.prepare("SELECT created_at as date, 'ALIS' as type, gross_total as amount, id as ref_id FROM purchase_invoices WHERE supplier_code=?").all(code);
+  const payments = db.prepare("SELECT created_at as date, 'ODEME' as type, amount, id as ref_id FROM supplier_payments WHERE supplier_code=?").all(code);
+  const rows = [...purchases, ...payments].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  res.json({ rows });
 });
 
 
