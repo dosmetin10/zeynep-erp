@@ -99,6 +99,63 @@ CREATE TABLE IF NOT EXISTS collection_receipts (
   method TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS purchase_invoices (
+  id INTEGER PRIMARY KEY,
+  invoice_no TEXT UNIQUE NOT NULL,
+  supplier_code TEXT NOT NULL,
+  net_total REAL NOT NULL CHECK(net_total > 0),
+  vat_total REAL NOT NULL CHECK(vat_total >= 0),
+  gross_total REAL NOT NULL CHECK(gross_total > 0),
+  status TEXT NOT NULL DEFAULT 'posted',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS purchase_lines (
+  id INTEGER PRIMARY KEY,
+  purchase_id INTEGER NOT NULL REFERENCES purchase_invoices(id) ON DELETE RESTRICT,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  qty REAL NOT NULL CHECK(qty > 0),
+  price REAL NOT NULL CHECK(price > 0),
+  vat_rate REAL NOT NULL CHECK(vat_rate >= 0)
+);
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id INTEGER PRIMARY KEY,
+  supplier_code TEXT NOT NULL,
+  amount REAL NOT NULL CHECK(amount > 0),
+  method TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS expense_receipts (
+  id INTEGER PRIMARY KEY,
+  expense_type TEXT NOT NULL,
+  description TEXT,
+  amount REAL NOT NULL CHECK(amount > 0),
+  method TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS bank_transactions (
+  id INTEGER PRIMARY KEY,
+  bank_name TEXT NOT NULL,
+  iban TEXT,
+  tx_type TEXT NOT NULL CHECK(tx_type IN ('deposit','withdraw')),
+  amount REAL NOT NULL CHECK(amount > 0),
+  description TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS warehouses (
+  id INTEGER PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS stock_transfers (
+  id INTEGER PRIMARY KEY,
+  transfer_no TEXT UNIQUE NOT NULL,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  qty REAL NOT NULL CHECK(qty > 0),
+  from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+  to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS audit_events (
   event_id TEXT PRIMARY KEY,
   actor_user_id INTEGER,
