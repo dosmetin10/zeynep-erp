@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MTN ERP</title>
+  <style>
+    :root { --bg:#f3f7fb; --panel:#fff; --line:#d8e0ea; --text:#1f2937; --brand:#0a4f7a; --brand2:#0e7490; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Segoe UI, Arial, sans-serif; color: var(--text); background: var(--bg); }
+    .layout { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
+    .side { background: linear-gradient(180deg, #0b3d5e, #0e7490); color:#fff; padding:18px; }
+    .brand { display:flex; gap:10px; align-items:center; margin-bottom:16px; }
+    .brand img { background:#fff; border-radius:8px; padding:4px; }
+    .nav { display:flex; flex-direction:column; gap:8px; }
+    .nav button { border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.1); color:#fff; border-radius:10px; padding:10px; text-align:left; font-size:15px; cursor:pointer; }
+    .nav button:hover { background:rgba(255,255,255,.18); }
+    .main { padding:16px; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .cards { display:grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap:10px; margin-bottom:12px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
+    .card h4 { margin:0 0 8px; font-size:13px; color:#6b7280; }
+    .card .v { font-size:26px; font-weight:700; color:var(--brand); }
+    .workspace { background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; min-height:72vh; }
+    .workspace iframe { width:100%; height:72vh; border:0; }
+    @media (max-width: 1000px){ .layout{grid-template-columns:1fr;} .side{position:sticky;top:0;z-index:10;} .cards{grid-template-columns:repeat(2,minmax(130px,1fr));}}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="side">
+      <div class="brand">
+        <img src="/branding/logo.svg" width="44" height="44" alt="logo" />
+        <div><strong>MTN ERP</strong><br /><small>Ön Muhasebe & Stok</small></div>
+      </div>
+      <div class="nav" id="nav"></div>
+    </aside>
+    <main class="main">
+      <div class="top">
+        <h2 style="margin:0">Yönetim Paneli</h2>
+        <div id="clock"></div>
+      </div>
+      <section class="cards">
+        <article class="card"><h4>Cari Sayısı</h4><div class="v" id="cariCount">0</div></article>
+        <article class="card"><h4>Stok Kalemi</h4><div class="v" id="stokCount">0</div></article>
+        <article class="card"><h4>Satış Toplamı</h4><div class="v" id="saleTotal">0 ₺</div></article>
+        <article class="card"><h4>Tahsilat Toplamı</h4><div class="v" id="colTotal">0 ₺</div></article>
+      </section>
+      <section class="workspace">
+        <iframe id="moduleFrame" src="/module.html?name=Cari"></iframe>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const modules = ['Cari', 'Stok', 'Satış', 'İrsaliye', 'Tahsilat Makbuzu', 'Raporlar'];
+    const nav = document.getElementById('nav');
+    const frame = document.getElementById('moduleFrame');
+
+    modules.forEach((m) => {
+      const b = document.createElement('button');
+      b.textContent = m;
+      b.onclick = () => frame.src = '/module.html?name=' + encodeURIComponent(m);
+      nav.appendChild(b);
+    });
+
+    function tick() {
+      document.getElementById('clock').textContent = new Date().toLocaleString('tr-TR');
+    }
+    setInterval(tick, 1000);
+    tick();
+
+    async function getJson(url) {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error(url + ' ' + r.status);
+      return r.json();
+    }
+
+    async function loadDashboard() {
+      try {
+        const [cari, stok, sales, col] = await Promise.all([
+          getJson('/api/customers?page=1&pageSize=1'),
+          getJson('/api/inventory/items?page=1&pageSize=1'),
+          getJson('/api/sales?page=1&pageSize=500'),
+          getJson('/api/collections?page=1&pageSize=500')
+        ]);
+        const saleTotal = (sales.rows || []).reduce((a,b)=>a + Number(b.total || 0), 0);
+        const colTotal = (col.rows || []).reduce((a,b)=>a + Number(b.amount || 0), 0);
+        cariCount.textContent = cari.total || 0;
+        stokCount.textContent = stok.total || 0;
+        const saleTotalEl = document.getElementById('saleTotal');
+        const colTotalEl = document.getElementById('colTotal');
+        saleTotalEl.textContent = saleTotal.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
+        colTotalEl.textContent = colTotal.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
+      } catch {
+        // UI fallback
+      }
+    }
+
+    loadDashboard();
+    setInterval(loadDashboard, 15000);
+  </script>
+</body>
+</html>

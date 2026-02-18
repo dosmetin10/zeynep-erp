@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MTN ERP Modül</title>
+  <style>
+    body { margin:0; font-family:Segoe UI,Arial,sans-serif; background:#f8fafc; }
+    .wrap { padding:14px; }
+    .panel { background:#fff; border:1px solid #d7e1ed; border-radius:12px; padding:12px; }
+    h3 { margin:0 0 12px; color:#0b3d5e; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+    input,select,button { padding:8px 10px; border:1px solid #c8d4e2; border-radius:8px; }
+    button { background:#f3f7fb; cursor:pointer; }
+    button.primary { background:#0b5fa1; color:#fff; border-color:#0b5fa1; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th,td { border:1px solid #d7e1ed; padding:7px; text-align:left; font-size:14px; }
+    .msg { margin-top:8px; color:#065f46; font-weight:600; min-height:20px; }
+  </style>
+</head>
+<body>
+<div class="wrap"><div class="panel"><h3 id="title">Modül</h3><div id="app"></div><div class="msg" id="msg"></div></div></div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const name = params.get('name') || 'Cari';
+  title.textContent = name + ' Modülü';
+  const app = document.getElementById('app');
+  const msg = document.getElementById('msg');
+
+  function esc(v) { return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+  async function api(url, options = {}) {
+    const r = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+    const t = await r.text();
+    const data = t ? JSON.parse(t) : {};
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    return data;
+  }
+  function ok(text){ msg.textContent = text; }
+
+  async function renderCari() {
+    app.innerHTML = `<div class="row"><input id="code" placeholder="Cari Kod" style="width:130px"><input id="cname" placeholder="Cari Adı" style="width:220px"><input id="city" placeholder="Şehir" style="width:140px"><button class="primary" id="save">Kaydet</button></div><table id="tbl"><tr><th>Kod</th><th>Ad</th><th>Şehir</th><th>Bakiye</th></tr></table>`;
+    const load = async () => {
+      const c = await api('/api/customers?page=1&pageSize=200');
+      const movPromises = c.rows.map(async r => {
+        const m = await api('/api/customers/' + encodeURIComponent(r.code) + '/movements');
+        const balance = (m.rows || []).reduce((a,b)=>a + (b.type === 'TAHSILAT' ? -Number(b.amount||0) : Number(b.amount||0)), 0);
+        return { ...r, balance };
+      });
+      const rows = await Promise.all(movPromises);
+      tbl.innerHTML = '<tr><th>Kod</th><th>Ad</th><th>Şehir</th><th>Bakiye</th></tr>' + rows.map(r => `<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.city)}</td><td>${Number(r.balance).toFixed(2)}</td></tr>`).join('');
+      if (!code.value) code.value = (await api('/api/codes/next?type=customer')).code;
+    };
+    save.onclick = async () => {
+      await api('/api/customers', { method:'POST', body: JSON.stringify({ code: code.value, name: cname.value, city: city.value, type: 'customer' }) });
+      cname.value = ''; city.value = ''; code.value = '';
+      ok('Cari kaydı oluşturuldu.');
+      await load();
+    };
+    await load();
+  }
+
+  async function renderStok() {
+    app.innerHTML = `<div class="row"><input id="sku" placeholder="Stok Kod" style="width:130px"><input id="sname" placeholder="Stok Adı" style="width:220px"><input id="qty" type="number" step="0.01" placeholder="Miktar" style="width:110px"><input id="cost" type="number" step="0.01" placeholder="Maliyet" style="width:110px"><button class="primary" id="save">Kaydet</button></div><table id="tbl"><tr><th>ID</th><th>Kod</th><th>Ad</th><th>Miktar</th><th>Maliyet</th></tr></table>`;
+    const load = async () => {
+      const d = await api('/api/inventory/items?page=1&pageSize=300');
+      tbl.innerHTML = '<tr><th>ID</th><th>Kod</th><th>Ad</th><th>Miktar</th><th>Maliyet</th></tr>' + d.rows.map(r => `<tr><td>${r.id}</td><td>${esc(r.sku)}</td><td>${esc(r.name)}</td><td>${r.qty}</td><td>${r.avg_cost}</td></tr>`).join('');
+      if (!sku.value) sku.value = (await api('/api/codes/next?type=stock')).code;
+    };
+    save.onclick = async () => {
+      await api('/api/inventory/items', { method:'POST', body: JSON.stringify({ sku: sku.value, name: sname.value, qty: Number(qty.value || 0), avgCost: Number(cost.value || 0) }) });
+      sku.value=''; sname.value=''; qty.value=''; cost.value='';
+      ok('Stok kartı kaydedildi.');
+      await load();
+    };
+    await load();
+  }
+
+  async function renderSimple(titleText, url, keys) {
+    app.innerHTML = `<h4>${esc(titleText)}</h4><table id="tbl"></table>`;
+    const d = await api(url);
+    const header = '<tr>' + keys.map(k => '<th>' + esc(k) + '</th>').join('') + '</tr>';
+    const rows = (d.rows || d).map(r => '<tr>' + keys.map(k => '<td>' + esc(r[k]) + '</td>').join('') + '</tr>').join('');
+    tbl.innerHTML = header + rows;
+  }
+
+  async function renderDispatch() {
+    app.innerHTML = `<div class="row"><input id="noteNo" placeholder="İrsaliye No" style="width:140px"><input id="cust" placeholder="Cari Kod" style="width:140px"><input id="itemId" type="number" placeholder="Stok ID" style="width:100px"><input id="qty" type="number" step="0.01" placeholder="Miktar" style="width:100px"><button class="primary" id="save">Kaydet</button></div><table id="tbl"><tr><th>ID</th><th>No</th><th>Cari</th><th>Miktar</th><th>PDF</th></tr></table>`;
+    const load = async () => {
+      const d = await api('/api/dispatch-notes?page=1&pageSize=200');
+      tbl.innerHTML = '<tr><th>ID</th><th>No</th><th>Cari</th><th>Miktar</th><th>PDF</th></tr>' + d.rows.map(r => `<tr><td>${r.id}</td><td>${esc(r.note_no)}</td><td>${esc(r.customer_code)}</td><td>${r.qty}</td><td><a href="/api/dispatch-notes/${r.id}/pdf" target="_blank">PDF</a></td></tr>`).join('');
+    };
+    save.onclick = async () => {
+      await api('/api/dispatch-notes', { method:'POST', body: JSON.stringify({ noteNo: noteNo.value, customerCode: cust.value, itemId: Number(itemId.value), qty: Number(qty.value || 0), kind: 'İrsaliye' }) });
+      noteNo.value=''; cust.value=''; itemId.value=''; qty.value='';
+      ok('İrsaliye kaydı oluşturuldu.');
+      await load();
+    };
+    await load();
+  }
+
+  async function renderCollection() {
+    app.innerHTML = `<div class="row"><input id="ccode" placeholder="Cari Kod" style="width:140px"><input id="amt" type="number" step="0.01" placeholder="Tutar" style="width:120px"><select id="method"><option value="cash">Nakit</option><option value="bank">Banka</option></select><button class="primary" id="save">Kaydet</button></div><table id="tbl"><tr><th>ID</th><th>Cari</th><th>Tutar</th><th>Yöntem</th><th>PDF</th></tr></table>`;
+    const load = async () => {
+      const d = await api('/api/collections?page=1&pageSize=200');
+      tbl.innerHTML = '<tr><th>ID</th><th>Cari</th><th>Tutar</th><th>Yöntem</th><th>PDF</th></tr>' + d.rows.map(r => `<tr><td>${r.id}</td><td>${esc(r.customer_code)}</td><td>${Number(r.amount).toFixed(2)}</td><td>${esc(r.method)}</td><td><a href="/api/collections/${r.id}/pdf" target="_blank">PDF</a></td></tr>`).join('');
+    };
+    save.onclick = async () => {
+      await api('/api/collections', { method:'POST', body: JSON.stringify({ customerCode: ccode.value, amount: Number(amt.value || 0), method: method.value }) });
+      ccode.value=''; amt.value='';
+      ok('Tahsilat kaydı oluşturuldu.');
+      await load();
+    };
+    await load();
+  }
+
+  (async () => {
+    try {
+      if (name === 'Cari') return renderCari();
+      if (name === 'Stok') return renderStok();
+      if (name === 'Satış') return renderSimple('Satış Listesi', '/api/sales?page=1&pageSize=200', ['id','customer_code','item_id','qty','price','total','status']);
+      if (name === 'İrsaliye') return renderDispatch();
+      if (name === 'Tahsilat Makbuzu' || name === 'Kasa') return renderCollection();
+      if (name === 'Raporlar') return renderSimple('Mizan', '/api/reports/trial-balance', ['account_code','dr','cr']);
+      app.innerHTML = 'Modül tanımlı değil.';
+    } catch (e) {
+      msg.textContent = e.message;
+      msg.style.color = '#b91c1c';
+    }
+  })();
+</script>
+</body>
+</html>
