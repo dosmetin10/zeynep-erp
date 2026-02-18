@@ -105,10 +105,14 @@
           getJson('/api/reports/summary')
         ]);
         const saleTotal = (sales.rows || []).reduce((a,b)=>a + Number(b.gross_total || 0), 0);
-        document.getElementById('cariCount').textContent = cari.total || 0;
-        document.getElementById('stokCount').textContent = stok.total || 0;
-        document.getElementById('saleTotal').textContent = saleTotal.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
-        document.getElementById('cashFlow').textContent = Number(summary.cashFlow || 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
+        const cariCountEl = document.getElementById('cariCount');
+        const stokCountEl = document.getElementById('stokCount');
+        const saleTotalEl = document.getElementById('saleTotal');
+        const cashFlowEl = document.getElementById('cashFlow');
+        cariCountEl.textContent = cari.total || 0;
+        stokCountEl.textContent = stok.total || 0;
+        saleTotalEl.textContent = saleTotal.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
+        cashFlowEl.textContent = Number(summary.cashFlow || 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
       } catch {
         // UI fallback
       }
