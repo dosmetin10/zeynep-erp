@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset='utf-8'><title>Modül</title></head><body>
+<h3 id='h'></h3><div id='content'>Yükleniyor...</div>
+<script>
+const name=new URLSearchParams(location.search).get('name');document.getElementById('h').textContent=name;
+const c=document.getElementById('content');
+function load(){if(name==='Raporlar'){fetch('/api/reports/trial-balance').then(r=>r.json()).then(d=>c.innerHTML='<pre>'+JSON.stringify(d,null,2)+'</pre>');} else {c.textContent='Bu modül için liste/arama/sayfalama API hazır. ('+name+')';}}
+const es=new EventSource('/events');es.onmessage=()=>setTimeout(load,500);load();
+</script></body></html>

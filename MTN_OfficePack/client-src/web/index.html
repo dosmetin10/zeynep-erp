@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset='utf-8'><title>MTN Mühendislik</title>
+<style>body{font-family:Arial;margin:0}header{display:flex;gap:10px;align-items:center;padding:10px;background:#0b3d5e;color:#fff}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px}button{padding:12px}</style>
+</head><body>
+<header><img src='/branding/logo.svg' width='36'/><h2>MTN Mühendislik</h2></header>
+<div class='grid' id='menu'></div>
+<script>
+const modules=['Cari','Stok','Satış','Alış','Kasa','Banka','Teklif','Fatura','Raporlar','Kullanıcılar & Roller','Ayarlar','Yedekleme','Hakkında'];
+const m=document.getElementById('menu');
+modules.forEach(x=>{const b=document.createElement('button');b.textContent=x;b.onclick=()=>window.open('/module.html?name='+encodeURIComponent(x),'_blank');m.appendChild(b);});
+</script></body></html>
